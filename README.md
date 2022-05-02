@@ -65,9 +65,9 @@ when seeing QQuickWindows being exposed.
 
 To enable this you have to add the following line to your application code:
 
-...
+```
 #include <VncNamespace.h>
 
 VNC::setup();
-...
+```
 
