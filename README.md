@@ -54,7 +54,7 @@ At the moment only the mandatory parts of the RFB protocol are implemented:
 
 - Framebuffer is always sent as "Raw" data.
 - No authentication
-- Only V3.3
+- Only RFB V3.3
 - X11 ( xcb platform plugin ) is also supported - mainly for development purposes
 - ...
 
@@ -72,5 +72,6 @@ To enable this you have to add the following line to your application code:
 VNC::setup();
 ```
 
-A viewer can connect to a window using ports starting from 5900.
-F.e the second window will then be on 5901.
+A viewer connects to a window using the ports starting from 5900.
+F.e the second window can be found on 5901. In theory the number of viewers being
+connected to the same window is unlimited.
