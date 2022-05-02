@@ -1,0 +1,6 @@
+moc
+obj
+lib
+Makefile
+.qmake*
+
