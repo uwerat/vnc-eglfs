@@ -16,11 +16,14 @@ class VncClient : public QObject
     Q_OBJECT
 
   public:
-    explicit VncClient( QTcpSocket*, VncServer* );
+    explicit VncClient( qintptr fd, VncServer* );
     ~VncClient() override;
 
     void markDirty( const QRect&, bool fullscreen );
     void updateCursor();
+
+  Q_SIGNALS:
+    void disconnected();
 
   protected:
     bool event(QEvent* ) override;

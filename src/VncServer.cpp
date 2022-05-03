@@ -7,7 +7,6 @@
 #include "VncClient.h"
 
 #include <qtcpserver.h>
-#include <qtcpsocket.h>
 #include <qopenglcontext.h>
 #include <qopenglfunctions.h>
 #include <qwindow.h>
@@ -83,6 +82,30 @@ namespace
             frameBuffer = QImage( size, QImage::Format_RGB32 );
         }
     }
+
+    class TcpServer final : public QTcpServer
+    {
+        Q_OBJECT
+
+      public:
+        TcpServer( QObject* parent )
+            : QTcpServer( parent )
+        {
+        }
+
+      Q_SIGNALS:
+        void connectionRequested( qintptr );
+
+      protected:
+        void incomingConnection( qintptr socketDescriptor ) override
+        {
+            /*
+                We do not want to use QTcpServer::nextPendingConnection to avoid
+                QTcpSocket being created in the wrong thread
+             */
+            Q_EMIT connectionRequested( socketDescriptor );
+        }
+    };
 }
 
 VncServer::VncServer( int port, QWindow* window )
@@ -101,8 +124,8 @@ VncServer::VncServer( int port, QWindow* window )
     QObject::connect( window, SIGNAL(frameSwapped()),
         this, SLOT(updateFrameBuffer()), Qt::DirectConnection );
     
-    auto tcpServer = new QTcpServer( this );
-    connect( tcpServer, &QTcpServer::newConnection, this, &VncServer::addClient );
+    auto tcpServer = new TcpServer( this );
+    connect( tcpServer, &TcpServer::connectionRequested, this, &VncServer::addClient );
 
     if( tcpServer->listen( QHostAddress::Any, port ) )
         qWarning("VncServer created on port %d", port);
@@ -113,29 +136,26 @@ VncServer::~VncServer()
     qDeleteAll( m_clients );
 }
 
-void VncServer::addClient()
+void VncServer::addClient( qintptr fd )
 {
-    auto tcpServer = qobject_cast< QTcpServer* >( sender() );
-    Q_ASSERT( tcpServer != nullptr );
+    auto client = new VncClient( fd, this );
+    connect( client, &VncClient::disconnected, this, &VncServer::removeClient );
 
-    auto socket = tcpServer->nextPendingConnection();
-
-    auto client = new VncClient( socket, this );
     m_clients += client;
 
-    connect( socket, &QTcpSocket::disconnected,
-             this, [ this, client ] { removeClient( client ); } );
-
-    qDebug() << "New VNC client attached: " << socket->localPort()
-        << m_clients.count();
+    // socket->localPort() ...
+    qDebug() << "New VNC client attached: " << m_clients.count();
 }
 
-void VncServer::removeClient( VncClient* client )
+void VncServer::removeClient()
 {
-    m_clients.removeOne(client);
-    client->deleteLater();
+    if ( auto client = qobject_cast< VncClient* >( sender() ) )
+    {
+        m_clients.removeOne( client );
+        client->deleteLater();
 
-    qDebug() << "VNC client detached: " << m_clients.count();
+        qDebug() << "VNC client detached: " << m_clients.count();
+    }
 }
 
 void VncServer::updateFrameBuffer()
@@ -167,4 +187,5 @@ VncCursor VncServer::cursor() const
     return m_cursor;
 }
 
+#include "VncServer.moc"
 #include "moc_VncServer.cpp"

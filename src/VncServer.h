@@ -36,8 +36,8 @@ class VncServer final : public QObject
     void updateFrameBuffer();
 
   private:
-    void addClient();
-    void removeClient( VncClient* );
+    void addClient( qintptr fd );
+    void removeClient();
 
     QWindow* m_window;
 

@@ -27,9 +27,8 @@ enum ClientState
 class VncClient::PrivateData
 {
   public:
-    PrivateData( QTcpSocket* socket, VncServer* server )
+    PrivateData( VncServer* server )
         : server( server )
-        , socket( socket )
     {
     }
 
@@ -67,14 +66,20 @@ class VncClient::PrivateData
     QVector< qint32 > encodings;
 };
 
-VncClient::VncClient( QTcpSocket* socket, VncServer* server )
-    : m_data( new PrivateData( socket, server ) )
+VncClient::VncClient( qintptr fd, VncServer* server )
+    : m_data( new PrivateData( server ) )
 {
+    auto socket = new QTcpSocket( this );
+    socket->setSocketDescriptor( fd );
+
     connect( socket, &QTcpSocket::readyRead, this, &VncClient::processClientData );
+    connect( socket, &QTcpSocket::disconnected, this, &VncClient::disconnected );
+
+    m_data->socket.initSocket( socket );
 
     // send protocol version
     const char proto[] = "RFB 003.003\n";
-    socket->write( proto, 12 );
+    m_data->socket.sendString( proto, 12 );
 
     m_data->state = Protocol;
 }
