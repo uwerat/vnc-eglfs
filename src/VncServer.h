@@ -11,7 +11,6 @@
 #include <qmutex.h>
 #include <qpointer.h>
 
-class VncClient;
 class QWindow;
 
 class VncCursor
@@ -42,7 +41,7 @@ class VncServer final : public QObject
     void removeClient();
 
     QPointer< QWindow > m_window;
-    QVector< VncClient* > m_clients;
+    QVector< QThread* > m_threads;
 
     mutable QMutex m_frameBufferMutex;
     QImage m_frameBuffer;

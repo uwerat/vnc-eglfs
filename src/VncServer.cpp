@@ -10,7 +10,7 @@
 #include <qopenglcontext.h>
 #include <qopenglfunctions.h>
 #include <qwindow.h>
-#include <qmutex.h>
+#include <qthread.h>
 
 #include <qpa/qplatformcursor.h>
 
@@ -71,6 +71,41 @@ namespace
             Q_EMIT connectionRequested( socketDescriptor );
         }
     };
+
+    class ClientThread : public QThread
+    {
+      public:
+        ClientThread( qintptr socketDescriptor, VncServer* server )
+            : QThread( server )
+            , m_socketDescriptor( socketDescriptor )
+        {
+        }
+
+        ~ClientThread()
+        {
+        }
+
+        void markDirty( const QRect& rect )
+        {
+            if ( m_client )
+                m_client->markDirty( rect, true );
+        }
+
+      protected:
+        void run() override
+        {
+            VncClient client( m_socketDescriptor, qobject_cast< VncServer* >( parent() ) );
+            connect( &client, &VncClient::disconnected, this, &QThread::quit );
+
+            m_client = &client;
+            QThread::run();
+            m_client = nullptr;
+        }
+
+      private:
+        VncClient* m_client = nullptr;
+        const qintptr m_socketDescriptor;
+    };
 }
 
 VncServer::VncServer( int port, QWindow* window )
@@ -90,15 +125,19 @@ VncServer::VncServer( int port, QWindow* window )
 
 VncServer::~VncServer()
 {
-    qDeleteAll( m_clients );
+    m_window = nullptr;
+
+    for ( auto thread : qAsConst( m_threads ) )
+    {
+        thread->quit();
+        thread->wait( 20 );
+    }
 }
 
 void VncServer::addClient( qintptr fd )
 {
-    auto client = new VncClient( fd, this );
-    connect( client, &VncClient::disconnected, this, &VncServer::removeClient );
-
-    m_clients += client;
+    auto thread = new ClientThread( fd, this );
+    m_threads += thread;
 
     if ( m_window && !m_grabConnectionId )
     {
@@ -114,24 +153,29 @@ void VncServer::addClient( qintptr fd )
         QMetaObject::invokeMethod( m_window, "update" );
     }
 
-    if ( auto tcpServer = qobject_cast< const TcpServer* >( sender() ) )
+    if ( auto tcpServer = qobject_cast< const QTcpServer* >( sender() ) )
     {
-        qInfo( "New VNC client attached on port %d, #clients: %d",
-            tcpServer->serverPort(), m_clients.count() );
+        qInfo( "New VNC client attached on port %d, #clients %d",
+            tcpServer->serverPort(), m_threads.count() );
     }
+
+    connect( thread, &QThread::finished, this, &VncServer::removeClient );
+    thread->start();
 }
 
 void VncServer::removeClient()
 {
-    if ( auto client = qobject_cast< VncClient* >( sender() ) )
+    if ( auto thread = qobject_cast< QThread* >( sender() ) )
     {
-        m_clients.removeOne( client );
-        client->deleteLater();
+        thread->quit();
 
-        if ( m_clients.isEmpty() && m_grabConnectionId )
+        m_threads.removeOne( thread );
+        delete thread;
+
+        if ( m_threads.isEmpty() && m_grabConnectionId )
             QObject::disconnect( m_grabConnectionId );
 
-        qInfo( "VNC client detached, #clients: %d",  m_clients.count() );
+        qInfo( "VNC client detached, #clients: %d",  m_threads.count() );
     }
 }
 
@@ -164,8 +208,11 @@ void VncServer::updateFrameBuffer()
 
     const QRect rect( 0, 0, m_frameBuffer.width(), m_frameBuffer.height() );
 
-    for ( auto client : qAsConst( m_clients ) )
-        client->markDirty( rect, true );
+    for ( auto thread : qAsConst( m_threads ) )
+    {
+        auto clientThread = static_cast< ClientThread* >( thread );
+        clientThread->markDirty( rect );
+    }
 }
 
 QWindow* VncServer::window() const
