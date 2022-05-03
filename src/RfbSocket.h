@@ -14,7 +14,8 @@ class QTcpSocket;
 class RfbSocket
 {
   public:
-    void initSocket( QTcpSocket* );
+    void open( QTcpSocket* );
+    void close();
 
     void sendEncoding32( qint32 );
 

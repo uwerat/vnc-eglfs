@@ -9,9 +9,14 @@
 
 #include <arpa/inet.h>
 
-void RfbSocket::initSocket( QTcpSocket* tcpSocket )
+void RfbSocket::open( QTcpSocket* tcpSocket )
 {
     m_tcpSocket = tcpSocket;
+}
+
+void RfbSocket::close()
+{
+    delete m_tcpSocket;
 }
 
 void RfbSocket::flush()

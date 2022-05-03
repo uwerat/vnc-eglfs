@@ -75,7 +75,7 @@ VncClient::VncClient( qintptr fd, VncServer* server )
     connect( socket, &QTcpSocket::readyRead, this, &VncClient::processClientData );
     connect( socket, &QTcpSocket::disconnected, this, &VncClient::disconnected );
 
-    m_data->socket.initSocket( socket );
+    m_data->socket.open( socket );
 
     // send protocol version
     const char proto[] = "RFB 003.003\n";
@@ -86,6 +86,7 @@ VncClient::VncClient( qintptr fd, VncServer* server )
 
 VncClient::~VncClient()
 {
+    m_data->socket.close();
 }
 
 void VncClient::markDirty( const QRect& rect, bool fullscreen )
