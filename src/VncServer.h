@@ -45,5 +45,7 @@ class VncServer final : public QObject
 
     QImage m_frameBuffer;
     VncCursor m_cursor;
+
+    QMetaObject::Connection m_grabConnectionId;
 };
 

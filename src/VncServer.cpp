@@ -116,19 +116,11 @@ VncServer::VncServer( int port, QWindow* window )
 
     m_window = window;
 
-    /*
-        frameSwapped is from the scene graph thread, so we
-        need a Qt::DirectConnection to avoid, that the image is
-        already gone, when being scheduled from a Qt::QQueuedConnection !
-     */
-    QObject::connect( window, SIGNAL(frameSwapped()),
-        this, SLOT(updateFrameBuffer()), Qt::DirectConnection );
-    
     auto tcpServer = new TcpServer( this );
     connect( tcpServer, &TcpServer::connectionRequested, this, &VncServer::addClient );
 
     if( tcpServer->listen( QHostAddress::Any, port ) )
-        qWarning("VncServer created on port %d", port);
+        qInfo( "VncServer created on port %d", port);
 }
 
 VncServer::~VncServer()
@@ -143,8 +135,25 @@ void VncServer::addClient( qintptr fd )
 
     m_clients += client;
 
-    // socket->localPort() ...
-    qDebug() << "New VNC client attached: " << m_clients.count();
+    if ( m_window && !m_grabConnectionId )
+    {
+        /*
+            frameSwapped is from the scene graph thread, so we
+            need a Qt::DirectConnection to avoid, that the image is
+            already gone, when being scheduled from a Qt::QQueuedConnection !
+         */
+
+        m_grabConnectionId = QObject::connect( m_window, SIGNAL(frameSwapped()),
+            this, SLOT(updateFrameBuffer()), Qt::DirectConnection );
+        
+        QMetaObject::invokeMethod( m_window, "update" );
+    }
+
+    if ( auto tcpServer = qobject_cast< const TcpServer* >( sender() ) )
+    {
+        qInfo( "New VNC client attached on port %d, #clients: %d",
+            tcpServer->serverPort(), m_clients.count() );
+    }
 }
 
 void VncServer::removeClient()
@@ -154,7 +163,10 @@ void VncServer::removeClient()
         m_clients.removeOne( client );
         client->deleteLater();
 
-        qDebug() << "VNC client detached: " << m_clients.count();
+        if ( m_clients.isEmpty() && m_grabConnectionId )
+            QObject::disconnect( m_grabConnectionId );
+
+        qInfo( "VNC client detached, #clients: %d",  m_clients.count() );
     }
 }
 
