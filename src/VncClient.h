@@ -19,7 +19,7 @@ class VncClient : public QObject
     explicit VncClient( QTcpSocket*, VncServer* );
     ~VncClient() override;
 
-    void markDirty( const QRect& );
+    void markDirty( const QRect&, bool fullscreen );
     void updateCursor();
 
   protected:

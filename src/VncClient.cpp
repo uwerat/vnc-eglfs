@@ -83,14 +83,30 @@ VncClient::~VncClient()
 {
 }
 
-void VncClient::markDirty( const QRect& rect )
+void VncClient::markDirty( const QRect& rect, bool fullscreen )
 {
+    auto& dirtyRegion = m_data->dirtyRegion;
+
+    const bool wasDirty = !dirtyRegion.isEmpty();
+
+    if ( fullscreen )
+    {
+        /*
+            After a resize we might have dirty rectangles from the
+            previous size.
+         */
+        dirtyRegion = QRegion();
+    }
+
     if ( !rect.isEmpty() )
     {
-        if ( m_data->dirtyRegion.isEmpty() )
+        if ( !wasDirty )
+        {
+            // scheduling an update
             QCoreApplication::postEvent( this, new QEvent(QEvent::UpdateRequest) );
+        }
 
-        m_data->dirtyRegion += rect;
+        dirtyRegion += rect;
     }
 }
 
@@ -318,11 +334,10 @@ bool VncClient::handleFrameBufferUpdateRequest()
         return false;
 
     const bool incremental = socket->receiveUint8();
-
-    QRect r = socket->readRect64();
+    const auto rect = socket->readRect64();
 
     if ( !incremental )
-        markDirty( r );
+        markDirty( rect, false );
 
     return true;
 }

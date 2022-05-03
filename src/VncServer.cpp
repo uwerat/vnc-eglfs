@@ -146,7 +146,7 @@ void VncServer::updateFrameBuffer()
     const QRect rect( 0, 0, m_frameBuffer.width(), m_frameBuffer.height() );
 
     for ( auto client : qAsConst( m_clients ) )
-        client->markDirty( rect );
+        client->markDirty( rect, true );
 }
 
 QWindow* VncServer::window() const
