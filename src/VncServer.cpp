@@ -10,6 +10,7 @@
 #include <qopenglcontext.h>
 #include <qopenglfunctions.h>
 #include <qwindow.h>
+#include <qmutex.h>
 
 #include <qpa/qplatformcursor.h>
 
@@ -46,42 +47,6 @@ namespace
         return createCursor( shape );
     }
 #endif
-
-    void grabPixels( QImage& frameBuffer )
-    {
-        auto context = QOpenGLContext::currentContext();
-
-        context->functions()->glReadPixels(
-            0, 0, frameBuffer.width(), frameBuffer.height(),
-            GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, frameBuffer.bits() );
-
-        // OpenGL images are vertically flipped.
-#if 1
-        /*
-            Actually we do not need to flip the image here. We could
-            simply iterate in inverted order, when sending the pixels
-            in RfbPixelStreamer. TODO ...
-         */
-        frameBuffer = frameBuffer.mirrored( false, true );
-#endif
-    }
-
-    void resizeFrameBuffer( const QSize& size, QImage& frameBuffer )
-    {
-        if ( size != frameBuffer.size() )
-        {
-            /*
-                On EGLFS the window always matches the screen size.
-
-                But when testing the implementation on X11 the window
-                might be resized manually later. Should be no problem,
-                as most clients indicate being capable of adjustments
-                of the framebuffer size. ( "DesktopSize" pseudo encoding )
-             */
-
-            frameBuffer = QImage( size, QImage::Format_RGB32 );
-        }
-    }
 
     class TcpServer final : public QTcpServer
     {
@@ -172,8 +137,30 @@ void VncServer::removeClient()
 
 void VncServer::updateFrameBuffer()
 {
-    resizeFrameBuffer( m_window->size(), m_frameBuffer );
-    grabPixels( m_frameBuffer );
+    {
+        QMutexLocker locker( &m_frameBufferMutex );
+
+        if ( m_window->size() != m_frameBuffer.size() )
+        {
+            /*
+                On EGLFS the window always matches the screen size.
+
+                But when testing the implementation on X11 the window
+                might be resized manually later. Should be no problem,
+                as most clients indicate being capable of adjustments
+                of the framebuffer size. ( "DesktopSize" pseudo encoding )
+             */
+
+            m_frameBuffer = QImage( m_window->size(), QImage::Format_RGB32 );
+        }
+
+        QOpenGLContext::currentContext()->functions()->glReadPixels(
+            0, 0, m_frameBuffer.width(), m_frameBuffer.height(),
+            GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, m_frameBuffer.bits() );
+
+        // OpenGL images are vertically flipped.
+        m_frameBuffer = std::move( m_frameBuffer ).mirrored( false, true );
+    }
 
     const QRect rect( 0, 0, m_frameBuffer.width(), m_frameBuffer.height() );
 
@@ -188,10 +175,10 @@ QWindow* VncServer::window() const
 
 QImage VncServer::frameBuffer() const
 {
-    resizeFrameBuffer( m_window->size(),
-         const_cast< VncServer* >( this )->m_frameBuffer );
+    QMutexLocker locker( &m_frameBufferMutex );
+    const auto fb = m_frameBuffer;
 
-    return m_frameBuffer;
+    return fb;
 }
 
 VncCursor VncServer::cursor() const

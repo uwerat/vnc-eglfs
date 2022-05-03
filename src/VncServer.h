@@ -8,6 +8,8 @@
 #include <qobject.h>
 #include <qimage.h>
 #include <qvector.h>
+#include <qmutex.h>
+#include <qpointer.h>
 
 class VncClient;
 class QWindow;
@@ -39,11 +41,12 @@ class VncServer final : public QObject
     void addClient( qintptr fd );
     void removeClient();
 
-    QWindow* m_window;
-
+    QPointer< QWindow > m_window;
     QVector< VncClient* > m_clients;
 
+    mutable QMutex m_frameBufferMutex;
     QImage m_frameBuffer;
+
     VncCursor m_cursor;
 
     QMetaObject::Connection m_grabConnectionId;

@@ -16,6 +16,7 @@
 #include <qvarlengtharray.h>
 #include <qendian.h>
 #include <qwindow.h>
+#include <qmutex.h>
 
 enum ClientState
 {
@@ -37,16 +38,6 @@ class VncClient::PrivateData
         return server->window();
     }
 
-    QSize frameBufferSize() const
-    {
-        return server->frameBuffer().size();
-    }
-
-    QImage::Format screenFormat() const
-    {
-        return server->frameBuffer().format();
-    }
-
     VncServer* server;
 
     RfbSocket socket;
@@ -60,17 +51,18 @@ class VncClient::PrivateData
     int messageType = -1;
     int pendingBytes = 0;
 
+    QMutex dirtyRegionMutex;
     QRegion dirtyRegion;
 
     // supported encodings in order of preference
     QVector< qint32 > encodings;
 };
 
-VncClient::VncClient( qintptr fd, VncServer* server )
+VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
     : m_data( new PrivateData( server ) )
 {
     auto socket = new QTcpSocket( this );
-    socket->setSocketDescriptor( fd );
+    socket->setSocketDescriptor( socketDescriptor );
 
     connect( socket, &QTcpSocket::readyRead, this, &VncClient::processClientData );
     connect( socket, &QTcpSocket::disconnected, this, &VncClient::disconnected );
@@ -91,33 +83,34 @@ VncClient::~VncClient()
 
 void VncClient::markDirty( const QRect& rect, bool fullscreen )
 {
-    auto& dirtyRegion = m_data->dirtyRegion;
+    if ( rect.isEmpty() )
+        return;
 
-    const bool wasDirty = !dirtyRegion.isEmpty();
+    bool wasDirty;
 
-    if ( fullscreen )
     {
-        /*
-            After a resize we might have dirty rectangles from the
-            previous size.
-         */
-        dirtyRegion = QRegion();
+        QMutexLocker locker( &m_data->dirtyRegionMutex );
+
+        auto& dirtyRegion = m_data->dirtyRegion;
+        wasDirty = !dirtyRegion.isEmpty();
+
+        if ( fullscreen )
+            dirtyRegion = rect;
+        else
+            dirtyRegion += rect;
     }
 
-    if ( !rect.isEmpty() )
-    {
-        if ( !wasDirty )
-        {
-            // scheduling an update
-            QCoreApplication::postEvent( this, new QEvent(QEvent::UpdateRequest) );
-        }
+    // scheduling an update
 
-        dirtyRegion += rect;
-    }
+    if ( !wasDirty )
+        QCoreApplication::postEvent( this, new QEvent(QEvent::UpdateRequest) );
 }
 
 void VncClient::processClientData()
 {
+    if ( m_data->window() == nullptr )
+        return;
+
     auto socket = &m_data->socket;
 
     if ( m_data->state == Protocol )
@@ -157,7 +150,7 @@ void VncClient::processClientData()
 
             // 6.3.2 ServerInit
 
-            socket->sendSize32( m_data->frameBufferSize() );
+            socket->sendSize32( m_data->window()->size() );
             m_data->pixelStreamer.sendServerFormat( socket );
 
             const char name[] = "VNC Server for Qt/Quick on EGLFS";
@@ -238,7 +231,12 @@ bool VncClient::event( QEvent* event )
 {
     if ( event->type() == QEvent::UpdateRequest )
     {
-        auto& region = m_data->dirtyRegion;
+        QRegion region;
+
+        {
+            QMutexLocker locker( &m_data->dirtyRegionMutex );
+            region.swap( m_data->dirtyRegion );
+        }
 
         const auto fb = m_data->server->frameBuffer();
 
@@ -256,7 +254,6 @@ bool VncClient::event( QEvent* event )
             }
 
             m_data->pixelStreamer.sendImageRaw( fb, region, &m_data->socket );
-            region = QRegion();
         }
 
         return true;
@@ -360,7 +357,9 @@ bool VncClient::handlePointerEvent()
     const auto x = socket->receiveUint16();
     const auto y = socket->receiveUint16();
 
-    Rfb::handlePointerEvent( QPoint( x, y ), buttonMask, m_data->server->window() );
+    if ( auto window = m_data->window() )
+        Rfb::handlePointerEvent( QPoint( x, y ), buttonMask, window );
+
     return true;
 }
 
@@ -376,7 +375,9 @@ bool VncClient::handleKeyEvent()
 
     const quint32 key = socket->receiveUint32();
 
-    Rfb::handleKeyEvent( key, down, m_data->window() );
+    if ( auto window = m_data->window() )
+        Rfb::handleKeyEvent( key, down, window );
+
     return true;
 }
 
