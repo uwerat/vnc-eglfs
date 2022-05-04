@@ -16,6 +16,8 @@
 #include <qvarlengtharray.h>
 #include <qendian.h>
 #include <qwindow.h>
+#include <qtimer.h>
+#include <qelapsedtimer.h>
 #include <qmutex.h>
 
 enum ClientState
@@ -58,6 +60,9 @@ class VncClient::PrivateData
 
     // supported encodings in order of preference
     QVector< qint32 > encodings;
+
+    QTimer timer;
+    QElapsedTimer startTime;
 };
 
 VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
@@ -70,6 +75,11 @@ VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
     connect( socket, &QTcpSocket::disconnected, this, &VncClient::disconnected );
 
     m_data->socket.open( socket );
+
+    m_data->startTime.start();
+
+    m_data->timer.setSingleShot( true );
+    connect( &m_data->timer, &QTimer::timeout, this, &VncClient::sendFrameBuffer );
 
     // send protocol version
     const char proto[] = "RFB 003.003\n";
@@ -88,24 +98,39 @@ void VncClient::markDirty( const QRect& rect, bool fullscreen )
     if ( rect.isEmpty() )
         return;
 
-    bool wasDirty;
+    QMutexLocker locker( &m_data->dirtyRegionMutex );
 
+    auto& dirtyRegion = m_data->dirtyRegion;
+
+    if ( fullscreen )
+        dirtyRegion = rect;
+    else
+        dirtyRegion += rect;
+
+    if ( !m_data->timer.isActive() )
     {
-        QMutexLocker locker( &m_data->dirtyRegionMutex );
+        /*
+            We might be called from the scenegraph thread and can't
+            start the timer, that lives in the client thread.
+         */
+        QMetaObject::invokeMethod( this, &VncClient::scheduleUpdate );
+    }
+}
 
-        auto& dirtyRegion = m_data->dirtyRegion;
-        wasDirty = !dirtyRegion.isEmpty();
+void VncClient::scheduleUpdate()
+{
+    int interval = 0;
 
-        if ( fullscreen )
-            dirtyRegion = rect;
-        else
-            dirtyRegion += rect;
+    if ( !m_data->frameBufferSize.isEmpty() )
+    {
+        const int tick = 30; // ms
+
+        interval = static_cast< int >( m_data->startTime.elapsed() % tick );
+        if ( interval > 0 )
+            interval = tick - interval;
     }
 
-    // scheduling an update
-
-    if ( !wasDirty )
-        QCoreApplication::postEvent( this, new QEvent(QEvent::UpdateRequest) );
+    m_data->timer.start( interval );
 }
 
 void VncClient::processClientData()
@@ -229,14 +254,6 @@ void VncClient::processClientData()
     }
 }
 
-bool VncClient::event( QEvent* event )
-{
-    if ( event->type() == QEvent::UpdateRequest )
-        sendFrameBuffer();
-
-    return QObject::event(event);
-}
-
 void VncClient::sendFrameBuffer()
 {
     QRegion region;
@@ -272,6 +289,14 @@ void VncClient::sendFrameBuffer()
         const auto regionSize = region.boundingRect().size();
         if ( regionSize.width() > fb.width() || regionSize.height() > fb.height() )
             region = QRect( 0, 0, fb.width(), fb.height() );
+#endif
+
+#if 0
+        static int elapsed = 0;
+
+        int e = m_data->startTime.elapsed();
+        qDebug() << e - elapsed;
+        elapsed = e;
 #endif
 
         m_data->pixelStreamer.sendImageRaw( fb, region, &m_data->socket );

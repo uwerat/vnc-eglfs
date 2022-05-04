@@ -25,12 +25,10 @@ class VncClient : public QObject
   Q_SIGNALS:
     void disconnected();
 
-  protected:
-    bool event(QEvent* ) override;
-
   private:
     void processClientData();
     void sendFrameBuffer();
+    void scheduleUpdate();
 
     bool handleSetPixelFormat();
     bool handleSetEncodings();
