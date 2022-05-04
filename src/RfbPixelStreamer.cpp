@@ -8,6 +8,7 @@
 
 #include <qimage.h>
 #include <qendian.h>
+#include <qdebug.h>
 
 namespace
 {
@@ -48,6 +49,13 @@ namespace
             m_blueShift = socket->receiveUint8();
 
             socket->receivePadding( 3 );
+
+#if 0
+            qDebug() << m_bitsPerPixel << m_depth
+                << "BE:" << m_bigEndian << "TC" << m_trueColor
+                << m_redBits << m_greenBits << m_blueBits
+                << m_redShift << m_greenShift << m_blueShift;
+#endif
         }
 
         void write( RfbSocket* socket )
