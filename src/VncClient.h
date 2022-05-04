@@ -30,6 +30,7 @@ class VncClient : public QObject
 
   private:
     void processClientData();
+    void sendFrameBuffer();
 
     bool handleSetPixelFormat();
     bool handleSetEncodings();

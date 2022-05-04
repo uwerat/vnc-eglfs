@@ -54,6 +54,8 @@ class VncClient::PrivateData
     QMutex dirtyRegionMutex;
     QRegion dirtyRegion;
 
+    QSize frameBufferSize;
+
     // supported encodings in order of preference
     QVector< qint32 > encodings;
 };
@@ -230,17 +232,25 @@ void VncClient::processClientData()
 bool VncClient::event( QEvent* event )
 {
     if ( event->type() == QEvent::UpdateRequest )
+        sendFrameBuffer();
+
+    return QObject::event(event);
+}
+
+void VncClient::sendFrameBuffer()
+{
+    QRegion region;
+
     {
-        QRegion region;
+        QMutexLocker locker( &m_data->dirtyRegionMutex );
+        region.swap( m_data->dirtyRegion );
+    }
 
-        {
-            QMutexLocker locker( &m_data->dirtyRegionMutex );
-            region.swap( m_data->dirtyRegion );
-        }
+    const auto fb = m_data->server->frameBuffer();
 
-        const auto fb = m_data->server->frameBuffer();
-
-        if ( !( region.isEmpty() || fb.isNull() ) )
+    if ( !( region.isEmpty() || fb.isNull() ) )
+    {
+        if ( fb.size() != m_data->frameBufferSize )
         {
             if ( m_data->screenResizable )
             {
@@ -253,21 +263,19 @@ bool VncClient::event( QEvent* event )
                 socket->sendEncoding32( -223 );
             }
 
-#if 1
-            // for some reason the region is not always cleared property. TODO ...
-
-            const auto regionSize = region.boundingRect().size();
-            if ( regionSize.width() > fb.width() || regionSize.height() > fb.height() )
-                region = QRect( 0, 0, fb.width(), fb.height() );
-#endif
-
-            m_data->pixelStreamer.sendImageRaw( fb, region, &m_data->socket );
+            m_data->frameBufferSize = fb.size();
         }
 
-        return true;
-    }
+#if 1
+        // for some reason the region is not always cleared property. TODO ...
 
-    return QObject::event(event);
+        const auto regionSize = region.boundingRect().size();
+        if ( regionSize.width() > fb.width() || regionSize.height() > fb.height() )
+            region = QRect( 0, 0, fb.width(), fb.height() );
+#endif
+
+        m_data->pixelStreamer.sendImageRaw( fb, region, &m_data->socket );
+    }
 }
 
 bool VncClient::handleSetPixelFormat()
@@ -348,7 +356,7 @@ bool VncClient::handleFrameBufferUpdateRequest()
     const auto rect = socket->readRect64();
 
     if ( !incremental )
-        markDirty( rect, false );
+        markDirty( rect, rect.size() == m_data->frameBufferSize  );
 
     return true;
 }
