@@ -253,6 +253,14 @@ bool VncClient::event( QEvent* event )
                 socket->sendEncoding32( -223 );
             }
 
+#if 1
+            // for some reason the region is not always cleared property. TODO ...
+
+            const auto regionSize = region.boundingRect().size();
+            if ( regionSize.width() > fb.width() || regionSize.height() > fb.height() )
+                region = QRect( 0, 0, fb.width(), fb.height() );
+#endif
+
             m_data->pixelStreamer.sendImageRaw( fb, region, &m_data->socket );
         }
 
