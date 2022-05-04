@@ -179,6 +179,36 @@ void VncServer::removeClient()
     }
 }
 
+static void grabWindow( QImage& frameBuffer )
+{
+#if 1
+    #ifndef GL_BGRA
+        #define GL_BGRA 0x80E1
+    #endif
+
+    #ifndef GL_UNSIGNED_INT_8_8_8_8_REV
+        #define GL_UNSIGNED_INT_8_8_8_8_REV 0x8367
+    #endif
+
+    QOpenGLContext::currentContext()->functions()->glReadPixels(
+        0, 0, frameBuffer.width(), frameBuffer.height(),
+        GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, frameBuffer.bits() );
+
+    // OpenGL images are vertically flipped.
+    frameBuffer = std::move( frameBuffer ).mirrored( false, true );
+
+#else
+
+    // fallback solution, when running certain OpenGL versions
+
+    extern QImage qt_gl_read_framebuffer(
+        const QSize&, bool alpha_format, bool include_alpha );
+
+    frameBuffer = qt_gl_read_framebuffer( frameBuffer.size(), false, false );
+
+#endif
+}
+
 void VncServer::updateFrameBuffer()
 {
     {
@@ -195,15 +225,10 @@ void VncServer::updateFrameBuffer()
                 of the framebuffer size. ( "DesktopSize" pseudo encoding )
              */
 
-            m_frameBuffer = QImage( m_window->size(), QImage::Format_RGB32 );
+            m_frameBuffer = QImage( m_window->size(), QImage::Format_RGBX8888 );
         }
 
-        QOpenGLContext::currentContext()->functions()->glReadPixels(
-            0, 0, m_frameBuffer.width(), m_frameBuffer.height(),
-            GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, m_frameBuffer.bits() );
-
-        // OpenGL images are vertically flipped.
-        m_frameBuffer = std::move( m_frameBuffer ).mirrored( false, true );
+        grabWindow( m_frameBuffer );
     }
 
     const QRect rect( 0, 0, m_frameBuffer.width(), m_frameBuffer.height() );
