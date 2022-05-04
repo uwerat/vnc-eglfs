@@ -21,7 +21,7 @@ void RfbSocket::close()
 
 void RfbSocket::flush()
 {
-    if ( m_tcpSocket )
+    if ( m_tcpSocket && m_tcpSocket->isOpen() )
         m_tcpSocket->flush();
 }
 
@@ -32,11 +32,8 @@ qint64 RfbSocket::bytesAvailable() const
 
 void RfbSocket::sendBytes( const void* data, qint64 count )
 {
-    if ( m_tcpSocket )
-    {
-        // checking for EINTR ???
+    if ( m_tcpSocket && m_tcpSocket->isOpen() )
         m_tcpSocket->write( reinterpret_cast< const char* >( data ), count );
-    }
 }
 
 qint64 RfbSocket::readBytes( void* data, qint64 count )
