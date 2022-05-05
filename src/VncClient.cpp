@@ -256,6 +256,9 @@ void VncClient::processClientData()
 
 void VncClient::sendFrameBuffer()
 {
+    if ( m_data->state != Connected )
+        return;
+
     QRegion region;
 
     {
