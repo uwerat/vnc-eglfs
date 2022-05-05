@@ -53,8 +53,6 @@ class VncClient::PrivateData
     int messageType = -1;
     int pendingBytes = 0;
 
-    bool frameRequested = false;
-
     QMutex dirtyRegionMutex;
     QRegion dirtyRegion;
 
@@ -63,8 +61,8 @@ class VncClient::PrivateData
     // supported encodings in order of preference
     QVector< qint32 > encodings;
 
-    QTimer timer;
-    QElapsedTimer startTime;
+    bool frameRequested = false;
+    QTimer updateTimer;
 };
 
 VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
@@ -75,13 +73,13 @@ VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
 
     connect( socket, &QTcpSocket::readyRead, this, &VncClient::processClientData );
     connect( socket, &QTcpSocket::disconnected, this, &VncClient::disconnected );
+    connect( socket, &QTcpSocket::disconnected, &m_data->updateTimer, &QTimer::stop );
 
     m_data->socket.open( socket );
 
-    m_data->startTime.start();
-
-    m_data->timer.setSingleShot( true );
-    connect( &m_data->timer, &QTimer::timeout, this, &VncClient::sendFrameBuffer );
+    // checking every 30ms for updates
+    m_data->updateTimer.setInterval( 30 );
+    connect( &m_data->updateTimer, &QTimer::timeout, this, &VncClient::maybeSendUpdate );
 
     // send protocol version
     const char proto[] = "RFB 003.003\n";
@@ -108,31 +106,6 @@ void VncClient::markDirty( const QRect& rect, bool fullscreen )
         dirtyRegion = rect;
     else
         dirtyRegion += rect;
-
-    if ( !m_data->timer.isActive() )
-    {
-        /*
-            We might be called from the scenegraph thread and can't
-            start the timer, that lives in the client thread.
-         */
-        QMetaObject::invokeMethod( this, &VncClient::scheduleUpdate );
-    }
-}
-
-void VncClient::scheduleUpdate()
-{
-    int interval = 0;
-
-    if ( !m_data->frameBufferSize.isEmpty() )
-    {
-        const int tick = 30; // ms
-
-        interval = static_cast< int >( m_data->startTime.elapsed() % tick );
-        if ( interval > 0 )
-            interval = tick - interval;
-    }
-
-    m_data->timer.start( interval );
 }
 
 void VncClient::processClientData()
@@ -256,10 +229,19 @@ void VncClient::processClientData()
     }
 }
 
-void VncClient::sendFrameBuffer()
+void VncClient::maybeSendUpdate()
 {
-    if ( m_data->state != Connected  || !m_data->frameRequested )
+    if ( !m_data->frameRequested )
+    {
+        /*
+            Better skip this interval to avoid flooding the client
+            or hogging the hogging the network
+         */
         return;
+    }
+
+    m_data->frameRequested = false;
+qDebug() << m_data->frameRequested;
 
     QRegion region;
 
@@ -267,6 +249,8 @@ void VncClient::sendFrameBuffer()
         QMutexLocker locker( &m_data->dirtyRegionMutex );
         region.swap( m_data->dirtyRegion );
     }
+
+qDebug() << region;
 
     const auto fb = m_data->server->frameBuffer();
 
@@ -294,14 +278,6 @@ void VncClient::sendFrameBuffer()
         const auto regionSize = region.boundingRect().size();
         if ( regionSize.width() > fb.width() || regionSize.height() > fb.height() )
             region = QRect( 0, 0, fb.width(), fb.height() );
-#endif
-
-#if 0
-        static int elapsed = 0;
-
-        int e = m_data->startTime.elapsed();
-        qDebug() << e - elapsed;
-        elapsed = e;
 #endif
 
         m_data->pixelStreamer.sendImageRaw( fb, region, &m_data->socket );
@@ -382,26 +358,24 @@ bool VncClient::handleFrameBufferUpdateRequest()
     if ( socket->bytesAvailable() < 9 )
         return false;
 
-    /*
-        To avoid sending frames before knowing the pixel format
-        from the client we wait for the initial FramebufferUpdateRequest
-     */
+    if ( !m_data->updateTimer.isActive() )
+    {
+        /*
+            To avoid sending frames before knowing the pixel format
+            from the client we wait for the initial FramebufferUpdateRequest
+         */
+
+        m_data->updateTimer.start();
+    }
+
     m_data->frameRequested = true;
+    qDebug() << m_data->frameRequested;
 
     const bool incremental = socket->receiveUint8();
     const auto rect = socket->readRect64();
 
     if ( !incremental )
-    {
         markDirty( rect, rect.size() == m_data->frameBufferSize  );
-    }
-    else
-    {
-        /*
-            The interval between 2 requests could be used to adjust the
-            update rate. TODO ...
-         */
-    }
 
     return true;
 }

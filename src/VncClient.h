@@ -27,8 +27,7 @@ class VncClient : public QObject
 
   private:
     void processClientData();
-    void sendFrameBuffer();
-    void scheduleUpdate();
+    void maybeSendUpdate();
 
     bool handleSetPixelFormat();
     bool handleSetEncodings();
