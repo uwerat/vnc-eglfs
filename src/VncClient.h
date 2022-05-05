@@ -19,7 +19,7 @@ class VncClient : public QObject
     explicit VncClient( qintptr fd, VncServer* );
     ~VncClient() override;
 
-    void markDirty( const QRect&, bool fullscreen );
+    void markDirty();
     void updateCursor();
 
   Q_SIGNALS:
@@ -27,7 +27,7 @@ class VncClient : public QObject
 
   private:
     void processClientData();
-    void maybeSendUpdate();
+    void maybeSendFrameBuffer();
 
     bool handleSetPixelFormat();
     bool handleSetEncodings();

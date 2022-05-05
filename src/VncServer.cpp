@@ -85,10 +85,10 @@ namespace
         {
         }
 
-        void markDirty( const QRect& rect )
+        void markDirty()
         {
             if ( m_client )
-                m_client->markDirty( rect, true );
+                m_client->markDirty();
         }
 
       protected:
@@ -236,7 +236,7 @@ void VncServer::updateFrameBuffer()
     for ( auto thread : qAsConst( m_threads ) )
     {
         auto clientThread = static_cast< ClientThread* >( thread );
-        clientThread->markDirty( rect );
+        clientThread->markDirty();
     }
 }
 

@@ -17,8 +17,6 @@
 #include <qendian.h>
 #include <qwindow.h>
 #include <qtimer.h>
-#include <qelapsedtimer.h>
-#include <qmutex.h>
 
 enum ClientState
 {
@@ -53,15 +51,14 @@ class VncClient::PrivateData
     int messageType = -1;
     int pendingBytes = 0;
 
-    QMutex dirtyRegionMutex;
-    QRegion dirtyRegion;
-
     QSize frameBufferSize;
 
     // supported encodings in order of preference
     QVector< qint32 > encodings;
 
     bool frameRequested = false;
+    bool frameDirty = true;
+
     QTimer updateTimer;
 };
 
@@ -79,7 +76,7 @@ VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
 
     // checking every 30ms for updates
     m_data->updateTimer.setInterval( 30 );
-    connect( &m_data->updateTimer, &QTimer::timeout, this, &VncClient::maybeSendUpdate );
+    connect( &m_data->updateTimer, &QTimer::timeout, this, &VncClient::maybeSendFrameBuffer );
 
     // send protocol version
     const char proto[] = "RFB 003.003\n";
@@ -93,19 +90,9 @@ VncClient::~VncClient()
     m_data->socket.close();
 }
 
-void VncClient::markDirty( const QRect& rect, bool fullscreen )
+void VncClient::markDirty()
 {
-    if ( rect.isEmpty() )
-        return;
-
-    QMutexLocker locker( &m_data->dirtyRegionMutex );
-
-    auto& dirtyRegion = m_data->dirtyRegion;
-
-    if ( fullscreen )
-        dirtyRegion = rect;
-    else
-        dirtyRegion += rect;
+    m_data->frameDirty = true;
 }
 
 void VncClient::processClientData()
@@ -229,32 +216,22 @@ void VncClient::processClientData()
     }
 }
 
-void VncClient::maybeSendUpdate()
+void VncClient::maybeSendFrameBuffer()
 {
-    if ( !m_data->frameRequested )
+    if ( !( m_data->frameRequested && m_data->frameDirty ) )
     {
         /*
             Better skip this interval to avoid flooding the client
-            or hogging the hogging the network
+            or hogging the network
          */
         return;
     }
 
-    m_data->frameRequested = false;
-qDebug() << m_data->frameRequested;
-
-    QRegion region;
-
-    {
-        QMutexLocker locker( &m_data->dirtyRegionMutex );
-        region.swap( m_data->dirtyRegion );
-    }
-
-qDebug() << region;
-
     const auto fb = m_data->server->frameBuffer();
 
-    if ( !( region.isEmpty() || fb.isNull() ) )
+    m_data->frameRequested = m_data->frameDirty = false;
+
+    if ( !fb.isNull() )
     {
         if ( fb.size() != m_data->frameBufferSize )
         {
@@ -272,15 +249,8 @@ qDebug() << region;
             m_data->frameBufferSize = fb.size();
         }
 
-#if 1
-        // for some reason the region is not always cleared property. TODO ...
-
-        const auto regionSize = region.boundingRect().size();
-        if ( regionSize.width() > fb.width() || regionSize.height() > fb.height() )
-            region = QRect( 0, 0, fb.width(), fb.height() );
-#endif
-
-        m_data->pixelStreamer.sendImageRaw( fb, region, &m_data->socket );
+        const QRect rect( 0, 0, fb.width(), fb.height() );
+        m_data->pixelStreamer.sendImageRaw( fb, rect, &m_data->socket );
     }
 }
 
@@ -369,13 +339,12 @@ bool VncClient::handleFrameBufferUpdateRequest()
     }
 
     m_data->frameRequested = true;
-    qDebug() << m_data->frameRequested;
 
     const bool incremental = socket->receiveUint8();
-    const auto rect = socket->readRect64();
+    (void)socket->readRect64();
 
     if ( !incremental )
-        markDirty( rect, rect.size() == m_data->frameBufferSize  );
+        markDirty();
 
     return true;
 }
