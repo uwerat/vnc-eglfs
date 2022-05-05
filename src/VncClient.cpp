@@ -53,6 +53,8 @@ class VncClient::PrivateData
     int messageType = -1;
     int pendingBytes = 0;
 
+    bool frameRequested = false;
+
     QMutex dirtyRegionMutex;
     QRegion dirtyRegion;
 
@@ -256,7 +258,7 @@ void VncClient::processClientData()
 
 void VncClient::sendFrameBuffer()
 {
-    if ( m_data->state != Connected )
+    if ( m_data->state != Connected  || !m_data->frameRequested )
         return;
 
     QRegion region;
@@ -380,11 +382,26 @@ bool VncClient::handleFrameBufferUpdateRequest()
     if ( socket->bytesAvailable() < 9 )
         return false;
 
+    /*
+        To avoid sending frames before knowing the pixel format
+        from the client we wait for the initial FramebufferUpdateRequest
+     */
+    m_data->frameRequested = true;
+
     const bool incremental = socket->receiveUint8();
     const auto rect = socket->readRect64();
 
     if ( !incremental )
+    {
         markDirty( rect, rect.size() == m_data->frameBufferSize  );
+    }
+    else
+    {
+        /*
+            The interval between 2 requests could be used to adjust the
+            update rate. TODO ...
+         */
+    }
 
     return true;
 }
