@@ -20,13 +20,14 @@ should be working just fine.
 
 But for Qt/Quick applications the situation is different as the VNC platform plugin does
 not support OpenGL. Rendering with the fallback software renderer
-( https://doc.qt.io/QtQuick2DRenderer ) has some problems:
+( https://doc.qt.io/QtQuick2DRenderer ) has significant limitations:
 
 - performance aspects ( should be a minor issue for a VNC scenario )
+- any native OpenGL fails 
 - custom scene graph nodes usually do not have a fallback implementation
 - shaders do not work in general
 
-Another limitation is that it is only available as platform plugin. So you
+Another problem is that it is only available as platform plugin. So you
 can't control the application remotely and locally at the same time.
 Actually you always have to restart the application to switch between them.
 
@@ -42,21 +43,20 @@ The rest is about mastering the details of the RFB protocol
 much from what any VNC server implementation has to do.
 
 An obvious problem of this approach is that any update on the screen leads to sending
-a complete fullscreen update over the wire. Considering that the Qt/Quick graphic stack is
-designed to support user interfaces with smooth transitions a low bandwidth connection will
-not match the requirements of the update rate.
+a complete fullscreen update over the wire. But when enabling JPEG compression the
+amount of data to be transferred can usually significantly reduced.
 
-Using Hardware accelerated H.264 encoding on the GPU might be a logical solution to this problem.
+As nowadays many GPUs have on board H.264 encoder it would be interesting to play with it.
+Unforatunately I have not seen a VNC viewer that supports that format so far.
 
 # Project status
 
-At the moment only the mandatory parts of the RFB protocol are implemented:
+Beside of the mandatory parts the following aspects of the RFB protocol are implemented:
 
-- Framebuffer is always sent as "Raw" data.
-- No authentication
-- Only RFB V3.3
-- X11 ( xcb platform plugin ) is also supported - mainly for development purposes
+- Tight/JPEG encoding
 - ...
+
+For development and test scenarios X11 ( xcb platform plugin ) is also supported.
 
 # How to use
 

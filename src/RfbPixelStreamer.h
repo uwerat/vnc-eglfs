@@ -18,6 +18,8 @@ class RfbPixelStreamer
     ~RfbPixelStreamer();
 
     void sendImageRaw( const QImage&, const QRegion&, RfbSocket* );
+    void sendImageJPEG( const QImage&, const QRegion&, int qualityLevel, RfbSocket* );
+
     void sendCursor( const QPoint&, const QImage&, RfbSocket* );
 
     void sendServerFormat( RfbSocket* );

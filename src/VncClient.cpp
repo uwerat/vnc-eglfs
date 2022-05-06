@@ -56,6 +56,9 @@ class VncClient::PrivateData
     // supported encodings in order of preference
     QVector< qint32 > encodings;
 
+    bool tightEnabled = false;
+    int jpegLevel = -1;
+
     bool frameRequested = false;
     bool frameDirty = true;
 
@@ -218,6 +221,26 @@ void VncClient::processClientData()
 
 void VncClient::maybeSendFrameBuffer()
 {
+    const auto fb = m_data->server->frameBuffer();
+    if ( fb.isNull() )
+        return;
+
+    if ( fb.size() != m_data->frameBufferSize )
+    {
+        if ( m_data->screenResizable )
+        {
+            auto socket = &m_data->socket;
+
+            socket->sendUint8( 0 ); // msg type
+            socket->sendPadding( 1 );
+            socket->sendUint16( 1 );
+            socket->sendRect64( QPoint(), fb.size() );
+            socket->sendEncoding32( -223 );
+        }
+
+        m_data->frameBufferSize = fb.size();
+    }
+
     if ( !( m_data->frameRequested && m_data->frameDirty ) )
     {
         /*
@@ -227,30 +250,19 @@ void VncClient::maybeSendFrameBuffer()
         return;
     }
 
-    const auto fb = m_data->server->frameBuffer();
-
     m_data->frameRequested = m_data->frameDirty = false;
 
-    if ( !fb.isNull() )
+    const QRect rect( 0, 0, fb.width(), fb.height() );
+
+    auto& streamer = m_data->pixelStreamer;
+
+    if ( m_data->tightEnabled && m_data->jpegLevel >= 0 )
     {
-        if ( fb.size() != m_data->frameBufferSize )
-        {
-            if ( m_data->screenResizable )
-            {
-                auto socket = &m_data->socket;
-
-                socket->sendUint8( 0 ); // msg type
-                socket->sendPadding( 1 );
-                socket->sendUint16( 1 );
-                socket->sendRect64( QPoint(), fb.size() );
-                socket->sendEncoding32( -223 );
-            }
-
-            m_data->frameBufferSize = fb.size();
-        }
-
-        const QRect rect( 0, 0, fb.width(), fb.height() );
-        m_data->pixelStreamer.sendImageRaw( fb, rect, &m_data->socket );
+        streamer.sendImageJPEG( fb, rect, m_data->jpegLevel, &m_data->socket );
+    }
+    else
+    {
+        streamer.sendImageRaw( fb, rect, &m_data->socket );
     }
 }
 
@@ -278,6 +290,12 @@ bool VncClient::handleSetEncodings()
             socket->receivePadding( 1 );
             count = socket->receiveUint16();
         }
+
+        m_data->encodings.clear();
+        m_data->tightEnabled = false;
+        m_data->cursorEnabled = false;
+        m_data->screenResizable = false;
+        m_data->jpegLevel = -1;
     }
 
     const auto bytesAvailable = (unsigned) socket->bytesAvailable();
@@ -291,10 +309,7 @@ bool VncClient::handleSetEncodings()
         enum Encoding
         {
             Raw = 0,
-            CopyRect = 1,
-            RRE = 2,
-            Hextile = 5,
-            ZRLE = 16,
+            Tight = 7,
 
             // pseudo encodings
             Cursor = -239,
@@ -304,20 +319,37 @@ bool VncClient::handleSetEncodings()
         const qint32 encoding = socket->receiveUint32();
         m_data->encodings += encoding;
 
-        if ( encoding == -239 )
+        if ( encoding == Tight )
         {
-            // Cursor
+            m_data->tightEnabled = true;
+        }
+        if ( encoding == Cursor )
+        {
             m_data->cursorEnabled = true;
             updateCursor();
         }
-        else if ( encoding == -223 )
+        else if ( encoding == DesktopSize )
         {
-            // DesktopSize
             m_data->screenResizable = true;
+        }
+        else if ( encoding >= -32 && encoding <= -23 )
+        {
+            m_data->jpegLevel = 32 + encoding;
+#if 1
+            qDebug() << "JPEG, level:" << m_data->jpegLevel;
+#endif
+        }
+        else if ( encoding >= -512 && encoding <= -412 )
+        {
+            qDebug() << "JPEG, level fine:" << 512 + encoding;
         }
     }
 
-    count = 0;
+#if 0
+    qDebug() << m_data->encodings;
+#endif
+
+    m_data->pendingBytes = 0;
     return true;
 }
 

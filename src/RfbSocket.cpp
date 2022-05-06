@@ -155,3 +155,8 @@ void RfbSocket::sendScanLine8( const char* line, int count )
 {
     sendBytes( line, count );
 }
+
+void RfbSocket::sendByteArray( const QByteArray& data )
+{
+    sendBytes( data.constData(), data.size() );
+}

@@ -225,7 +225,7 @@ void VncServer::updateFrameBuffer()
                 of the framebuffer size. ( "DesktopSize" pseudo encoding )
              */
 
-            m_frameBuffer = QImage( m_window->size(), QImage::Format_RGBX8888 );
+            m_frameBuffer = QImage( m_window->size(), QImage::Format_RGB32 );
         }
 
         grabWindow( m_frameBuffer );

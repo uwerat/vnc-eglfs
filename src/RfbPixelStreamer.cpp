@@ -9,6 +9,8 @@
 #include <qimage.h>
 #include <qendian.h>
 #include <qdebug.h>
+#include <qbuffer.h>
+#include <QImageWriter>
 
 namespace
 {
@@ -118,13 +120,17 @@ namespace
         template< typename T >
         inline void convertPixels( const QRgb* rgbBuffer, int count, T* out ) const
         {
+            const int rs = 8 - m_redBits;
+            const int gs = 8 - m_greenBits;
+            const int bs = 8 - m_blueBits;
+
             for ( int i = 0; i < count; ++i )
             {
                 const auto rgb = rgbBuffer[i];
 
-                const int r = qRed( rgb ) >> ( 8 - m_redBits );
-                const int g = qGreen( rgb ) >> ( 8 - m_greenBits );
-                const int b = qBlue( rgb ) >> ( 8 - m_blueBits );
+                const int r = qRed( rgb ) >> rs;
+                const int g = qGreen( rgb ) >> gs;
+                const int b = qBlue( rgb ) >> bs;
 
                 const T pixel = ( r << m_redShift ) |
                     ( g << m_greenShift ) |
@@ -242,6 +248,74 @@ void RfbPixelStreamer::sendImageRaw(
 
         socket->sendEncoding32( 0 ); // Raw
         sendImageData( image, rect, socket );
+    }
+
+    socket->flush();
+}
+
+void RfbPixelStreamer::sendImageJPEG(
+    const QImage& image, const QRegion& region, int qualityLevel, RfbSocket* socket )
+{
+    QBuffer buffer;
+
+    // 100: high quality, low compression
+    const int compression = ( 10 - qualityLevel ) * 10;
+
+    QImageWriter encoder( &buffer, "jpeg" );
+    encoder.setCompression( compression );
+
+    socket->sendUint8( 0 ); // msg type
+    socket->sendPadding( 1 );
+
+    socket->sendUint16( 1 );
+
+
+    QRegion tightRegion;
+
+    for ( const QRect& rect : region )
+    {
+        // Tight encoding limits the width of a rectangle
+        const int maxWidth = 2048;
+
+        for ( int x = rect.x(); x < rect.x() + rect.width(); x += maxWidth )
+        {
+            const int width = qMin( maxWidth, rect.x() + rect.width() - x );
+            tightRegion += QRect( x, rect.y(), width, rect.height() );
+        }
+    }
+
+    for ( const QRect& rect : tightRegion )
+    {
+        socket->sendRect64( rect );
+
+        socket->sendEncoding32( 7 ); // Tight
+        socket->sendUint8( ( 1 << 4 ) | ( 1 << 7 ) );
+
+        if ( rect == QRect( 0, 0, image.width(), image.height() ) )
+            encoder.write( image );
+        else
+            encoder.write( image.copy( rect ) );
+
+        const quint32 length = buffer.buffer().count();
+
+        // length in compact representation
+        if ( length >= 16384 )
+        {
+            socket->sendUint8( ( length & 0x7f ) | ( 1 << 7 ) );
+            socket->sendUint8( ( ( length >> 7 ) & 0x7f ) | ( 1 << 7 ) );
+            socket->sendUint8( length >> 14 );
+        }
+        else if ( length >= 128 )
+        {
+            socket->sendUint8( ( length & 0x7f ) | ( 1 << 7 ) );
+            socket->sendUint8( length >> 7 );
+        }
+        else
+        {
+            socket->sendUint8( length );
+        }
+
+        socket->sendByteArray( buffer.buffer() );
     }
 
     socket->flush();

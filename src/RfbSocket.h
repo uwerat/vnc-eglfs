@@ -8,6 +8,7 @@
 #include <QPointer>
 #include <QColor>
 #include <QRect>
+#include <QByteArray>
 
 class QTcpSocket;
 
@@ -36,6 +37,8 @@ class RfbSocket
 
     void sendScanLine32( const QRgb*, int count );
     void sendScanLine8( const char*, int count );
+
+    void sendByteArray( const QByteArray& );
 
     void sendPoint32( const QPoint& );
     void sendSize32( const QSize& );
