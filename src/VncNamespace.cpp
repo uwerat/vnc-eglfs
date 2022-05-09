@@ -26,10 +26,16 @@ namespace
         QVector< VncServer* > m_servers;
     };
 
-    inline bool isQuickWindow( const QObject* object )
+    inline bool isOpenGLQuickWindow( const QObject* object )
     {
         // no qobject_cast to avoid dependencies to Qt/Quick classes 
-        return object && object->inherits( "QQuickWindow" );
+        if ( object && object->inherits( "QQuickWindow" ) )
+        {
+            auto window = qobject_cast< const QWindow* >( object );
+            return window->supportsOpenGL();
+        }
+
+        return false;
     }
 
     VncManager* vncManager = nullptr;
@@ -45,7 +51,7 @@ static void vncInit()
     vncManager = new VncManager();
     qAddPostRoutine( vncDestroy );
 
-    qDebug() << "VNC: QQuickWindows are be accessible from ports >= 5900";
+    qDebug() << "VNC: QQuickWindows are accessible from ports >= 5900";
 }
 
 Q_COREAPP_STARTUP_FUNCTION( vncInit )
@@ -59,7 +65,7 @@ VncManager::VncManager()
 {
     for ( auto window : QGuiApplication::topLevelWindows() )
     {
-        if ( window->isExposed() && isQuickWindow( window ) )
+        if ( window->isExposed() && isOpenGLQuickWindow( window ) )
             m_servers += new VncServer( m_port++, window );
     }
 
@@ -91,7 +97,7 @@ bool VncManager::eventFilter( QObject* object, QEvent* event )
     {
         auto window = qobject_cast< QWindow* >( object );
 
-        if ( isQuickWindow( window ) )
+        if ( isOpenGLQuickWindow( window ) )
         {
             if ( server( window ) == nullptr )
                 m_servers += new VncServer( m_port++, window );
