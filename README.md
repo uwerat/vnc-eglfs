@@ -1,12 +1,14 @@
 # VNC for Qt/Quick on EGLFS
 
-This project offers a VNC server for Qt/Quick applications on the EGLFS platform:
+A VNC server for Qt/Quick applications on the EGLFS platform:
 
 - https://en.wikipedia.org/wiki/Virtual_Network_Computing
 - https://doc.qt.io/qt-6/qtquick-index.html
 - https://doc.qt.io/qt-6/embedded-linux.html
 
-It is supposed to work with all Qt versions >= 5.0
+While the motivation of this project is for EGLFS it also works with
+X11. I never tried Wayland myself, but it should be possible to
+get it running there too.
 
 # Who needs this
 
@@ -33,7 +35,7 @@ Actually you always have to restart the application to switch between them.
 
 # How does the VncEglfs solution work
 
-VncEglfs starts a VNC servers for QQuickWindows - what kind of corresponds to screens
+VncEglfs starts VNC servers for QQuickWindows - what kind of corresponds to screens
 for EGLFS. Whenever a "frameSwapped" signal happens
 ( https://doc.qt.io/qt-6/qtquick-visualcanvas-scenegraph.html ) the content
 of the window is grabbed into a local buffer.
@@ -56,8 +58,6 @@ Beside of the mandatory parts the following aspects of the RFB protocol are impl
 - Tight/JPEG encoding
 - ...
 
-For development and test scenarios X11 ( xcb platform plugin ) is also supported.
-
 # How to use
 
 Public APIs have not yet been decided and at the moment you can simply use
@@ -75,3 +75,6 @@ VNC::setup();
 A viewer connects to a window using the ports starting from 5900.
 F.e the second window can be found on 5901. In theory the number of viewers being
 connected to the same window is unlimited.
+
+If you want to get rid of the local windows you can run the application with
+the GBM platform from: https://github.com/uwerat/qpagbm
