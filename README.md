@@ -77,4 +77,6 @@ F.e the second window can be found on 5901. In theory the number of viewers bein
 connected to the same window is unlimited.
 
 If you want to get rid of the local windows you can run the application with
-the GBM platform from: https://github.com/uwerat/qpagbm
+the "gbm" platform from: https://github.com/uwerat/qpagbm. For X11 the undocumented
+"offscreen" platform, that comes with Qt, will do the job as well.
+
