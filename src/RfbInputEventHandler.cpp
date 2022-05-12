@@ -152,19 +152,69 @@ void Rfb::handlePointerEvent( const QPointF& pos, quint8 buttonMask, QWindow* wi
     }
 }
 
+static QString keyText( quint32 qtkey, bool isLower, Qt::KeyboardModifiers modifiers )
+{
+    if ( modifiers == Qt::ControlModifier )
+    {
+        switch( qtkey )
+        {
+            case Qt::Key_G:
+                return QStringLiteral( "\a" );
+
+            case Qt::Key_H:
+                return QStringLiteral( "\b" );
+
+            case Qt::Key_I:
+                return QStringLiteral( "\t" );
+
+            case Qt::Key_J:
+                return QStringLiteral( "\n" );
+
+            case Qt::Key_K:
+                return QStringLiteral( "\v" );
+
+            case Qt::Key_L:
+                return QStringLiteral( "\f" );
+
+            case Qt::Key_M:
+                return QStringLiteral( "\r" );
+        }
+    }
+    
+    switch( qtkey )
+    {
+        case Qt::Key_Backspace:
+            return QStringLiteral( "\b" );
+
+        case Qt::Key_Return:
+            return QStringLiteral( "\r" );
+    }
+
+    if ( qtkey >= Qt::Key_Space && qtkey <= Qt::Key_ydiaeresis )
+    {
+        if ( isLower )
+            qtkey -= 'A' - 'a';
+            
+        return QString( qtkey );
+    }
+
+    return QString();
+}
+
 void Rfb::handleKeyEvent( quint32 keysym, bool down, QWindow* window )
 {
     // see https://cgit.freedesktop.org/xorg/proto/x11proto/tree/keysymdef.h
 
-    int qtkey = 0; // corresponding to Qt::Key
-    int unicode = 0;
+    quint32 qtkey = 0; // corresponding to Qt::Key
+    bool isLower = false;
 
     if ( keysym <= 0x00ff )
     {
-        unicode = keysym;
-
         if ( isprint( keysym ) )
+        {
             qtkey = toupper( keysym );
+            isLower = qtkey != keysym;
+        }
     }
     else
     {
@@ -180,9 +230,8 @@ void Rfb::handleKeyEvent( quint32 keysym, bool down, QWindow* window )
         }
         else if ( keysym >= 0xffb0 && keysym <= 0xffb9 )
         {
-            const auto offset = keysym - 0xffb0;
-            unicode = '0' + offset;
-            qtkey = Qt::Key_0 + offset;
+            // Num pad
+            qtkey = Qt::Key_0 + ( keysym - 0xffb0 );
         }
         else
         {
@@ -190,18 +239,16 @@ void Rfb::handleKeyEvent( quint32 keysym, bool down, QWindow* window )
             if ( it != Rfb::keyTable.end() )
                 qtkey = it->second;
         }
-
-        if ( isprint( qtkey ) )
-            unicode = qtkey;
     }
 
 #if 0
     qDebug() << QString( "0x" )
         + QString::number( keysym ) << Qt::Key( qtkey ) << unicode;
 #endif
-    if ( unicode || qtkey )
+    if ( qtkey )
     {
         auto modifiers = QGuiApplication::keyboardModifiers();
+        const auto text = keyText( qtkey, isLower, modifiers );
 
         if ( qtkey == Qt::Key_Shift )
         {
@@ -219,6 +266,6 @@ void Rfb::handleKeyEvent( quint32 keysym, bool down, QWindow* window )
         const auto eventType = down ? QEvent::KeyPress : QEvent::KeyRelease;
 
         QWindowSystemInterface::handleKeyEvent( window,
-            eventType, qtkey, modifiers, QString( unicode ) );
+            eventType, qtkey, modifiers, text );
     }
 }
