@@ -198,8 +198,7 @@ static void grabWindow( QImage& frameBuffer )
     frameBuffer = std::move( frameBuffer ).mirrored( false, true );
 
 #else
-
-    // fallback solution, when running certain OpenGL versions
+    // avoiding native OpenGL calls
 
     extern QImage qt_gl_read_framebuffer(
         const QSize&, bool alpha_format, bool include_alpha );
@@ -214,7 +213,8 @@ void VncServer::updateFrameBuffer()
     {
         QMutexLocker locker( &m_frameBufferMutex );
 
-        if ( m_window->size() != m_frameBuffer.size() )
+        const auto size = m_window->size() * m_window->devicePixelRatio();
+        if ( size != m_frameBuffer.size() )
         {
             /*
                 On EGLFS the window always matches the screen size.
@@ -225,7 +225,7 @@ void VncServer::updateFrameBuffer()
                 of the framebuffer size. ( "DesktopSize" pseudo encoding )
              */
 
-            m_frameBuffer = QImage( m_window->size(), QImage::Format_RGB32 );
+            m_frameBuffer = QImage( size, QImage::Format_RGB32 );
         }
 
         grabWindow( m_frameBuffer );
