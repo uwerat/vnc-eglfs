@@ -7,6 +7,7 @@
 #include <qpa/qwindowsysteminterface.h>
 #include <qguiapplication.h>
 #include <unordered_map>
+#include <cctype>
 #include <QDebug>
 
 namespace Rfb
@@ -207,6 +208,8 @@ void Rfb::handleKeyEvent( quint32 keysym, bool down, QWindow* window )
 
     quint32 qtkey = 0; // corresponding to Qt::Key
     bool isLower = false;
+
+    // isprint and friends depend on the locale, TODO ...
 
     if ( keysym <= 0x00ff )
     {
