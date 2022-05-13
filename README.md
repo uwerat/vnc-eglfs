@@ -58,6 +58,9 @@ Beside of the mandatory parts the following aspects of the RFB protocol are impl
 - Tight/JPEG encoding
 - ...
 
+Code has been built for Qt >= 5.12, but it should be possible to also support more
+recent versions with adding a few ifdefs.
+
 # How to use
 
 Public APIs have not yet been decided and at the moment you can simply use
