@@ -6,6 +6,10 @@
 #include "RfbPixelStreamer.h"
 #include "RfbSocket.h"
 
+#ifdef VNC_VA_ENCODER
+    #include "va/VncVaEncoder.h"
+#endif
+
 #include <qimage.h>
 #include <qendian.h>
 #include <qdebug.h>
@@ -253,6 +257,25 @@ void RfbPixelStreamer::sendImageRaw(
     socket->flush();
 }
 
+#ifdef VNC_VA_ENCODER
+
+static void vaEncode( const QImage& image )
+{
+    QImage img = image;
+    //img.fill( Qt::green );
+
+    VncVaEncoder encoder;
+    encoder.open();
+    encoder.encode( img.constBits(), img.width(), img.height(), 50 );
+    encoder.close();
+
+#if 0
+    img.save( "/tmp/qtimage.jpg", "jpeg", 50 );
+#endif
+}
+
+#endif
+
 void RfbPixelStreamer::sendImageJPEG(
     const QImage& image, const QRegion& region, int qualityLevel, RfbSocket* socket )
 {
@@ -291,6 +314,9 @@ void RfbPixelStreamer::sendImageJPEG(
         socket->sendEncoding32( 7 ); // Tight
         socket->sendUint8( ( 1 << 4 ) | ( 1 << 7 ) );
 
+#ifdef VNC_VA_ENCODER
+        vaEncode( image );
+#endif
         if ( rect == QRect( 0, 0, image.width(), image.height() ) )
             encoder.write( image );
         else
