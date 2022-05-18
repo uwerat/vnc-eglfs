@@ -5,16 +5,11 @@
 
 #include "RfbPixelStreamer.h"
 #include "RfbSocket.h"
-
-#ifdef VNC_VA_ENCODER
-    #include "va/VncVaEncoder.h"
-#endif
+#include "RfbEncoder.h"
 
 #include <qimage.h>
 #include <qendian.h>
 #include <qdebug.h>
-#include <qbuffer.h>
-#include <QImageWriter>
 
 namespace
 {
@@ -178,6 +173,7 @@ namespace
 class RfbPixelStreamer::PrivateData
 {
   public:
+    RfbEncoder encoder;
     PixelFormat format;
 };
 
@@ -257,41 +253,19 @@ void RfbPixelStreamer::sendImageRaw(
     socket->flush();
 }
 
-#ifdef VNC_VA_ENCODER
-
-static void vaEncode( const QImage& image )
-{
-    QImage img = image;
-    //img.fill( Qt::green );
-
-    VncVaEncoder encoder;
-    encoder.open();
-    encoder.encode( img.constBits(), img.width(), img.height(), 50 );
-    encoder.close();
-
-#if 0
-    img.save( "/tmp/qtimage.jpg", "jpeg", 50 );
-#endif
-}
-
-#endif
-
 void RfbPixelStreamer::sendImageJPEG(
     const QImage& image, const QRegion& region, int qualityLevel, RfbSocket* socket )
 {
-    QBuffer buffer;
-
     // 100: high quality, low compression
     const int compression = ( 10 - qualityLevel ) * 10;
 
-    QImageWriter encoder( &buffer, "jpeg" );
+    auto& encoder = m_data->encoder;
     encoder.setCompression( compression );
 
     socket->sendUint8( 0 ); // msg type
     socket->sendPadding( 1 );
 
     socket->sendUint16( 1 );
-
 
     QRegion tightRegion;
 
@@ -314,15 +288,9 @@ void RfbPixelStreamer::sendImageJPEG(
         socket->sendEncoding32( 7 ); // Tight
         socket->sendUint8( ( 1 << 4 ) | ( 1 << 7 ) );
 
-#ifdef VNC_VA_ENCODER
-        vaEncode( image );
-#endif
-        if ( rect == QRect( 0, 0, image.width(), image.height() ) )
-            encoder.write( image );
-        else
-            encoder.write( image.copy( rect ) );
+        encoder.encode( image, rect );
 
-        const quint32 length = buffer.buffer().count();
+        const quint32 length = encoder.encodedData().count();
 
         // length in compact representation
         if ( length >= 16384 )
@@ -341,8 +309,10 @@ void RfbPixelStreamer::sendImageJPEG(
             socket->sendUint8( length );
         }
 
-        socket->sendByteArray( buffer.buffer() );
+        socket->sendByteArray( encoder.encodedData() );
     }
+
+    encoder.release();
 
     socket->flush();
 }

@@ -59,27 +59,22 @@ void VncVaRenderer::render( const uint8_t* frame )
 
     auto surface_status = static_cast< VASurfaceStatus >( 0 );
     vaQuerySurfaceStatus( m_display, m_surfaceId, &surface_status );
+    // check surface_status ???
+}
+
+void VncVaRenderer::mapEncoded( uint8_t*& data, size_t& size )
+{
+    // segment->status & VA_CODED_BUF_STATUS_SLICE_OVERFLOW_MASK ???
 
     VACodedBufferSegment* segment = nullptr;
     vaMapBuffer( m_display, m_codedBufferId, (void**)( &segment ) );
 
-    if ( segment->status & VA_CODED_BUF_STATUS_SLICE_OVERFLOW_MASK )
-    {
-        fprintf( stderr, "Coded buffer too small\n" );
-    }
+    data = reinterpret_cast< uint8_t* >( segment->buf );
+    size = segment->size;
+}
 
-#if 1
-    {
-        // segment->next ???
-        auto file = fopen( "/tmp/image.jpg", "wb" );
-
-        size_t n;
-        do { n = fwrite( segment->buf, segment->size, 1, file ); } while ( n != 1 );
-
-        fclose( file );
-    }
-#endif
-
+void VncVaRenderer::unmapEncoded()
+{
     vaUnmapBuffer( m_display, m_codedBufferId );
 }
 

@@ -175,12 +175,25 @@ void VncVaEncoder::encode( const uint8_t* frame, int width, int height, int qual
     // For the moment we recreate everything for each frame. TODO ...
     resizeSurface( width, height );
 
-    VncVaRenderer renderer;
-    renderer.initialize( m_display, m_configId, m_surfaceId, m_contextId );
+    m_renderer = new VncVaRenderer();
+    m_renderer->initialize( m_display, m_configId, m_surfaceId, m_contextId );
 
-    renderer.addBuffers( width, height, quality );
-    renderer.render( frame );
-    renderer.removeBuffers();
+    m_renderer->addBuffers( width, height, quality );
+    m_renderer->render( frame );
+    m_renderer->removeBuffers();
+}
+
+void VncVaEncoder::mapEncoded( uint8_t*& data, size_t& size )
+{
+    m_renderer->mapEncoded( data, size );
+}
+
+void VncVaEncoder::unmapEncoded()
+{
+    m_renderer->unmapEncoded();
+
+    delete m_renderer;
+    m_renderer = nullptr;
 
     vaDestroySurfaces( m_display, &m_surfaceId, 1 );
     vaDestroyContext( m_display, m_contextId );

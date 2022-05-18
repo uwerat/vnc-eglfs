@@ -8,6 +8,8 @@
 #include <cinttypes>
 #include <va/va.h>
 
+class VncVaRenderer;
+
 class VncVaEncoder
 {
   public:
@@ -20,6 +22,9 @@ class VncVaEncoder
     bool isOpen() const;
 
     void encode( const uint8_t*, int width, int height, int quality );
+
+    void mapEncoded( uint8_t*&, size_t& size );
+    void unmapEncoded();
 
   private:
     bool openDisplay();
@@ -37,4 +42,6 @@ class VncVaEncoder
     VAConfigID m_configId = 0;
     VASurfaceID m_surfaceId = 0;
     VAContextID m_contextId = 0;
+
+    VncVaRenderer* m_renderer = nullptr;
 };

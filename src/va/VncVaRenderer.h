@@ -16,6 +16,9 @@ class VncVaRenderer
 
     void render( const uint8_t* );
 
+    void mapEncoded( uint8_t*&, size_t& size );
+    void unmapEncoded();
+
   private:
     template< typename T > VABufferID createBuffer( VABufferType, T& );
     VABufferID createBuffer( VABufferType, unsigned int size, void* data );
