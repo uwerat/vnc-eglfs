@@ -113,12 +113,33 @@ RfbEncoder::~RfbEncoder()
     delete m_encoder;
 }
 
+#define DEBUG_ENCODING 0
+
+#if DEBUG_ENCODING
+    #include <qelapsedtimer.h>
+#endif
+
 void RfbEncoder::encode( const QImage& image, const QRect& rect )
 {
+#if DEBUG_ENCODING
+    QElapsedTimer timer;
+    timer.start();
+#endif
+
     if ( rect == QRect( 0, 0, image.width(), image.height() ) )
         m_encoder->encode( image, m_compression );
     else
         m_encoder->encode( image.copy( rect ), m_compression );
+
+#if DEBUG_ENCODING
+    const auto ms = timer.elapsed();
+
+    qDebug() << "JPEG:" << "quality:" << m_compression
+        << "w:" << image.width() << "h:" << image.height()
+        << "bytes:" << image.sizeInBytes()
+        << "->" << m_encoder->encodedData().size()
+        << "ms: elapsed" << ms;
+#endif
 }
 
 const QByteArray& RfbEncoder::encodedData() const

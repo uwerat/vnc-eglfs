@@ -154,7 +154,7 @@ void VncVaEncoder::resizeSurface( int width, int height )
         fourcc.type = VASurfaceAttribPixelFormat;
         fourcc.flags = VA_SURFACE_ATTRIB_SETTABLE;
         fourcc.value.type = VAGenericValueTypeInteger;
-        fourcc.value.value.i = VA_FOURCC_RGBA; // 4 bytes : r, g, b, unspecified
+        fourcc.value.value.i = VA_FOURCC_RGBA;
 
         vaCreateSurfaces( m_display, VA_RT_FORMAT_RGB32, width, height,
             &m_surfaceId, 1, &fourcc, 1 );
