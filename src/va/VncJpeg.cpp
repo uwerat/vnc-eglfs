@@ -337,12 +337,12 @@ namespace VncJpeg
 
         add8( 3 ); // num components
 
-        //Y
+        // Y
         add8( 1 );
         add4( 0 );
         add4( 0 );
 
-        //U
+        // U
         add8( 2 );
         add4( 1 );
         add4( 1 );
