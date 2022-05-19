@@ -209,42 +209,25 @@ namespace VncJpeg
 
     Header::Header( int width, int height, int quality )
     {
-        /*
-            most of the header is static - we could generate most of
-            it at compile time. TODO ...
-         */
-
         add16( SOI ); // Start of Image
 
         // -- Application Segment
 
         add16( APP0 );  // Application Segment
 
-        add16( 16 );    //Length excluding the marker
-        add8( 0x4A );   //J
-        add8( 0x46 );   //F
-        add8( 0x49 );   //I
-        add8( 0x46 );   //F
-        add8( 0x00 );   //0
-        add8( 1 );      //Major Version
-        add8( 1 );      //Minor Version
+        add16( 16 );           //Length excluding the marker
+        addBytes( "JFIF", 5 ); // including '\0'
+        add8( 1 );             //Major Version
+        add8( 1 );             //Minor Version
 
-        /*
-            Density units:
-                0: no units
-                1: pixels per inch
-                2: pixels per cm
-            X density ( pixel-aspect-ratio )
-            Y density ( pixel-aspect-ratio )
-         */
     #if 0
-        add8( 1 );
+        add8( 1 );   // 
         add16( 72 );
         add16( 72 );
     #else
-        add8( 0 );
-        add16( 1 );
-        add16( 1 );
+        add8( 0 );  // 0: no units, 1: pixels per inch, 2: pixels per cm
+        add16( 1 ); // X pixel-aspect-ratio
+        add16( 1 ); // Y pixel-aspect-ratio
     #endif
 
         // Thumbnail width/height
@@ -260,9 +243,8 @@ namespace VncJpeg
             const auto& quant = ( i == 0 ) ? lumaQuant : chromaQuant;
 
             add16( DQT );
-            add16( 3 + quant.size() );   // Lq
-            add4( 0 );                   // Pq
-            add4( ( i == 0 ) ? 0 : 1  ); // Tq
+            add16( 3 + quant.size() );
+            add2x4( 0, ( i == 0 ) ? 0 : 1 ); // Pq, Tq
 
             for ( size_t i = 0; i < quant.size(); i++ )
             {
@@ -279,54 +261,47 @@ namespace VncJpeg
 
         add16( 8 + 3 * 3 ); // num bytes
 
-        add8( 8 );     // sample_precision
+        add8( 8 );       // sample_precision
         add16( height );
         add16( width );
 
-        add8( 3 );     // num_components
+        add8( 3 );       // num_components
 
-        add8( 1 );     // id
-        add4( 1 );     // horizontal_factor
-        add4( 1 );     // vertical_factor
-        add8( 0 );     // quant_table_selector
+        add8( 1 );       // id
+        add2x4( 1, 1 );  // horizontal/vertical factors
+        add8( 0 );       // quant_table_selector
 
-        add8( 2 );     // id
-        add4( 1 );     // horizontal_factor
-        add4( 1 );     // vertical_factor
-        add8( 1 );     // quant_table_selector
+        add8( 2 );       // id
+        add2x4( 1, 1 );  // horizontal/vertical factors
+        add8( 1 );       // quant_table_selector
 
-        add8( 3 );     // id
-        add4( 1 );     // horizontal_factor
-        add4( 1 );     // vertical_factor
-        add8( 1 );     // quant_table_selector
+        add8( 3 );       // id
+        add2x4( 1, 1 );  // horizontal/vertical factors
+        add8( 1 );       // quant_table_selector
 
         // -- Huffman Tables
 
         add16( DHT );
         add16( 3 + dcCoefficientsLuminance().size() + dcValues().size() );
-        add4( 0 ); // DC
-        add4( 0 ); // Huffman table id
+        add2x4( 0, 0 ); // DC, Huffman table id
         addBytes( dcCoefficientsLuminance() );
         addBytes( dcValues() );
 
         add16( DHT );
         add16( 3 + acCoefficientsLuminance().size() + acValuesLuminance().size() );
-        add4( 1 ); // AC
-        add4( 0 ); // Huffman table id
+        add2x4( 1, 0 ); // AC, Huffman table id
         addBytes( acCoefficientsLuminance() );
         addBytes( acValuesLuminance() );
 
         add16( DHT );
         add16( 3 + dcCoefficientsChroma().size() + dcValues().size() );
-        add4( 0 ); // DC
-        add4( 1 ); // Huffman table id
+        add2x4( 0, 1 ); // DC, Huffman table id
         addBytes( dcCoefficientsChroma() );
         addBytes( dcValues() );
 
         add16( DHT );
         add16( 3 + acCoefficientsChroma().size() + acValuesChroma().size() );
-        add4( 1 ); // AC
-        add4( 1 ); // Huffman table id
+        add2x4( 1, 1 ); // AC, Huffman table id
         addBytes( acCoefficientsChroma() );
         addBytes( acValuesChroma() );
 
@@ -337,56 +312,47 @@ namespace VncJpeg
 
         add8( 3 ); // num components
 
-        // Y
-        add8( 1 );
-        add4( 0 );
-        add4( 0 );
+        add8( 1 ); // Y
+        add2x4( 0, 0 );
 
-        // U
-        add8( 2 );
-        add4( 1 );
-        add4( 1 );
+        add8( 2 ); // U
+        add2x4( 1, 1 );
 
-        // V
-        add8( 3 );
-        add4( 1 );
-        add4( 1 );
+        add8( 3 ); // V
+        add2x4( 1, 1 );
 
         add8( 0 );
         add8( 63 ); // baseline
-        add4( 0 );
-        add4( 0 );
+        add2x4( 0, 0 );
     }
+
+    void Header::add2x4( uint8_t val1, uint8_t val2 )
+    {
+        add8( ( val2 & 0xf ) | ( val1 << 4 ) );
+    }
+
+    void Header::add8( uint8_t val )
+    {
+        m_buffer[m_pos++] = val;
+    }
+
     void Header::add16( uint16_t val )
     {
-        val = htons( val );
+        val = htons( val ); // ???
 
-        add( val & 0xff, 8 );
-        add( val >> 8, 8 );
+        add8( val & 0xff );
+        add8( val >> 8 );
     }
 
     void Header::addBytes( const std::vector< uint8_t >& bytes )
     {
-        for ( size_t i = 0; i < bytes.size(); i++ )
-            add8( bytes[i] );
+        memcpy( m_buffer + m_pos, bytes.data(), bytes.size() );
+        m_pos += bytes.size();
     }
 
-    void Header::add( uint8_t val, int numBits )
+    void Header::addBytes( const char* bytes, size_t count )
     {
-        const int pos = m_bitCount / 8;
-
-        if ( m_bitCount % 8 )
-        {
-            m_buffer[pos] = ( val & 0xf ) | ( m_buffer[pos] << 4 );
-
-            if ( numBits > 4 )
-                m_buffer[pos + 1] = ( val >> 4 );
-        }
-        else
-        {
-            m_buffer[pos] = val;
-        }
-
-        m_bitCount += numBits;
+        memcpy( m_buffer + m_pos, bytes, count );
+        m_pos += count;
     }
 }

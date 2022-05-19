@@ -241,12 +241,12 @@ void VncVaRenderer::addPackedHeaderBuffer( int width, int height, int quality )
 
     VAEncPackedHeaderParameterBuffer param;
     param.type = VAEncPackedHeaderRawData;
-    param.bit_length = header.count();
+    param.bit_length = header.count() * 8;
     param.has_emulation_bytes = 0;
 
     addBuffer( VAEncPackedHeaderParameterBufferType, param );
 
-    const auto count = ( header.count() + 7 ) / 8;
+    const auto count = header.count();
     const auto data = ( void* )header.buffer();
 
     addBuffer( VAEncPackedHeaderDataBufferType, count, data );
