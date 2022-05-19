@@ -49,5 +49,6 @@ videoacceleration {
 
     DEFINES += VNC_VA_ENCODER
 
-    LIBS += -lva-drm -lva
+    CONFIG += link_pkgconfig
+    PKGCONFIG += libva-drm libva
 }
