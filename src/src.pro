@@ -18,6 +18,7 @@ DESTDIR = lib
 HEADERS += \
     RfbSocket.h \
     RfbPixelStreamer.h \
+    RfbEncoder.h \
     RfbInputEventHandler.h \
     VncServer.h \
     VncClient.h \
@@ -26,6 +27,7 @@ HEADERS += \
 SOURCES += \
     RfbSocket.cpp \
     RfbPixelStreamer.cpp \
+    RfbEncoder.cpp \
     RfbInputEventHandler.cpp \
     VncServer.cpp \
     VncClient.cpp \

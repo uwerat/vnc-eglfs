@@ -5,12 +5,11 @@
 
 #include "RfbPixelStreamer.h"
 #include "RfbSocket.h"
+#include "RfbEncoder.h"
 
 #include <qimage.h>
 #include <qendian.h>
 #include <qdebug.h>
-#include <qbuffer.h>
-#include <QImageWriter>
 
 namespace
 {
@@ -174,6 +173,7 @@ namespace
 class RfbPixelStreamer::PrivateData
 {
   public:
+    RfbEncoder encoder;
     PixelFormat format;
 };
 
@@ -256,19 +256,15 @@ void RfbPixelStreamer::sendImageRaw(
 void RfbPixelStreamer::sendImageJPEG(
     const QImage& image, const QRegion& region, int qualityLevel, RfbSocket* socket )
 {
-    QBuffer buffer;
+    auto& encoder = m_data->encoder;
 
-    // 100: high quality, low compression
-    const int compression = ( 10 - qualityLevel ) * 10;
-
-    QImageWriter encoder( &buffer, "jpeg" );
-    encoder.setCompression( compression );
+    // quality: [1:100], level: [0,9]. Higher means better quality + less compression
+    encoder.setQuality( ( qualityLevel + 1 ) * 10 );
 
     socket->sendUint8( 0 ); // msg type
     socket->sendPadding( 1 );
 
     socket->sendUint16( 1 );
-
 
     QRegion tightRegion;
 
@@ -291,12 +287,9 @@ void RfbPixelStreamer::sendImageJPEG(
         socket->sendEncoding32( 7 ); // Tight
         socket->sendUint8( ( 1 << 4 ) | ( 1 << 7 ) );
 
-        if ( rect == QRect( 0, 0, image.width(), image.height() ) )
-            encoder.write( image );
-        else
-            encoder.write( image.copy( rect ) );
+        encoder.encode( image, rect );
 
-        const quint32 length = buffer.buffer().count();
+        const quint32 length = encoder.encodedData().count();
 
         // length in compact representation
         if ( length >= 16384 )
@@ -315,8 +308,10 @@ void RfbPixelStreamer::sendImageJPEG(
             socket->sendUint8( length );
         }
 
-        socket->sendByteArray( buffer.buffer() );
+        socket->sendByteArray( encoder.encodedData() );
     }
+
+    encoder.release();
 
     socket->flush();
 }
