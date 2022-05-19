@@ -256,11 +256,10 @@ void RfbPixelStreamer::sendImageRaw(
 void RfbPixelStreamer::sendImageJPEG(
     const QImage& image, const QRegion& region, int qualityLevel, RfbSocket* socket )
 {
-    // 100: high quality, low compression
-    const int compression = ( 10 - qualityLevel ) * 10;
-
     auto& encoder = m_data->encoder;
-    encoder.setCompression( compression );
+
+    // quality: [1:100], level: [0,9]. Higher means better quality + less compression
+    encoder.setQuality( ( qualityLevel + 1 ) * 10 );
 
     socket->sendUint8( 0 ); // msg type
     socket->sendPadding( 1 );

@@ -29,12 +29,12 @@ namespace
             m_imageWriter.setFormat( "jpeg" );
         }
 
-        void encode( const QImage& image, int compression ) override
+        void encode( const QImage& image, int quality ) override
         {
             QBuffer buffer( &m_encodedData );
 
             m_imageWriter.setDevice( &buffer );
-            m_imageWriter.setCompression( compression );
+            m_imageWriter.setQuality( quality );
             m_imageWriter.write( image );
         }
 
@@ -67,10 +67,10 @@ namespace
             m_vaEncoder.open();
         }   
         
-        void encode( const QImage& image, int compression ) override
+        void encode( const QImage& image, int quality ) override
         {
             m_vaEncoder.encode( image.constBits(),
-                image.width(), image.height(), compression );
+                image.width(), image.height(), quality );
 
             uint8_t* data;
             size_t size;
@@ -127,14 +127,14 @@ void RfbEncoder::encode( const QImage& image, const QRect& rect )
 #endif
 
     if ( rect == QRect( 0, 0, image.width(), image.height() ) )
-        m_encoder->encode( image, m_compression );
+        m_encoder->encode( image, m_quality );
     else
-        m_encoder->encode( image.copy( rect ), m_compression );
+        m_encoder->encode( image.copy( rect ), m_quality );
 
 #if DEBUG_ENCODING
     const auto ms = timer.elapsed();
 
-    qDebug() << "JPEG:" << "quality:" << m_compression
+    qDebug() << "JPEG:" << "quality:" << m_quality
         << "w:" << image.width() << "h:" << image.height()
         << "bytes:" << image.sizeInBytes()
         << "->" << m_encoder->encodedData().size()

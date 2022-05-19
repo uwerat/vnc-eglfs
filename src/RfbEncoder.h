@@ -15,8 +15,8 @@ class RfbEncoder
     RfbEncoder();
     ~RfbEncoder();
 
-    void setCompression( int compression );
-    int compression() const;
+    void setQuality( int compression );
+    int quality() const;
 
     void encode( const QImage&, const QRect& );
     const QByteArray& encodedData() const;
@@ -28,17 +28,15 @@ class RfbEncoder
   private:
     Encoder* m_encoder;
 
-    int m_compression = 50;
+    int m_quality = 50;
 };
 
-inline void RfbEncoder::setCompression( int compression )
+inline void RfbEncoder::setQuality( int quality )
 {
-    m_compression = compression;
+    m_quality = quality;
 }
 
-inline int RfbEncoder::compression() const
+inline int RfbEncoder::quality() const
 {
-    return m_compression;
+    return m_quality;
 }
-
-;
