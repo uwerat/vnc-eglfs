@@ -9,6 +9,8 @@ CONFIG += hide_symbols
 CONFIG += silent
 CONFIG += no_private_qt_headers_warning
 
+# CONFIG += videoacceleration
+
 MOC_DIR=moc
 OBJECTS_DIR=obj
 
@@ -32,3 +34,21 @@ SOURCES += \
     VncServer.cpp \
     VncClient.cpp \
     VncNamespace.cpp \
+
+videoacceleration {
+
+    HEADERS += \
+        va/VncJpeg.h \
+        va/VncVaRenderer.h \
+        va/VncVaEncoder.h
+
+    SOURCES += \
+        va/VncJpeg.cpp \
+        va/VncVaRenderer.cpp \
+        va/VncVaEncoder.cpp
+
+    DEFINES += VNC_VA_ENCODER
+
+    CONFIG += link_pkgconfig
+    PKGCONFIG += libva-drm libva
+}
