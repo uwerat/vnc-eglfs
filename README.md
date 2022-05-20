@@ -86,15 +86,14 @@ VNC::setup();
 
 If you want to get rid of the local windows you have several options:
 
-- [gbm platform plugin](https://github.com/uwerat/qpagbm)
-- ( X11 ) the undocumented "offscreen" platform, that comes with Qt
-- ( EGLFS ) configuring eglfs ( headless )
+- using the [gbm platform plugin](https://github.com/uwerat/qpagbm)
+- using the undocumented "offscreen" platform, that comes with Qt ( X11 only )
+- reconfiguring a [headless](https://doc.qt.io/qt-5/embedded-linux.html#advanced-eglfs-kms-features) mode ( EGLFS only  )
 
 ## VNC platform integration proxy
 
 If you do not want ( or can't ) touch application code you can load the VNC platform
-plugin proxy by using one of these [keys](https://github.com/uwerat/vnc-eglfs/blob/main/platformproxy/metadata.json)
-
+plugin proxy by using one of these: [keys](https://github.com/uwerat/vnc-eglfs/blob/main/platformproxy/metadata.json).
 The [proxy](https://github.com/uwerat/vnc-eglfs/blob/main/platformproxy/VncProxyPlugin.cpp)
 simply does the initialization above before loading the real plugin following the "vnc" prefix.
 
@@ -105,7 +104,5 @@ Assuming library and plugin are installed in "/usr/local/vnceglfs":
 export QT_QPA_PLATFORM_PLUGIN_PATH="/usr/local/vnceglfs/plugins"
 export LD_LIBRARY_PATH="/usr/local/vnceglfs/lib"
 
-export QT_QPA_PLATFORM=vnceglfs
-#export QT_QPA_PLATFORM=vncxcb
-#export QT_QPA_PLATFORM=vncwayland
+export QT_QPA_PLATFORM=vnceglfs # vncxcb, vncwayland
 ```
