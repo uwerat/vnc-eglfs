@@ -80,6 +80,31 @@ F.e the second window can be found on 5901. In theory the number of viewers bein
 connected to the same window is unlimited.
 
 If you want to get rid of the local windows you can run the application with
-the "gbm" platform from: https://github.com/uwerat/qpagbm. For X11 the undocumented
-"offscreen" platform, that comes with Qt, will do the job as well.
+the "gbm" platform from: https://github.com/uwerat/qpagbm.
 
+For X11 the undocumented "offscreen" platform, that comes with Qt, will do the job as well.
+Maybe it also possble to configure a headless mode for eglfs.
+
+# VNC platform integration proxy
+
+If you do not want ( or can't ) touch application code you can load the VNC platform
+plugin proxy by using one of these keys: 
+
+    - vnceglfs
+    - vncxcb
+    - vncwayland
+
+The proxy simply does the initialization above before loading
+the real plugin following the "vnc" prefix.
+
+Assuming library and plugin are installed in "/usr/local/vnceglfs":
+
+```
+# export QT_DEBUG_PLUGINS=1
+export QT_QPA_PLATFORM_PLUGIN_PATH="/usr/local/vnceglfs/plugins"
+export LD_LIBRARY_PATH="/usr/local/vnceglfs/lib"
+
+export QT_QPA_PLATFORM=vnceglfs
+#export QT_QPA_PLATFORM=vncxcb
+#export QT_QPA_PLATFORM=vncwayland
+```
