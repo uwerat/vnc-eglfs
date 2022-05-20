@@ -63,11 +63,20 @@ recent versions with adding a few ifdefs.
 
 # How to use
 
-Public APIs have not yet been decided and at the moment you can simply use
+Public APIs have not yet been decided and at the moment you can only use
 the library in a specific mode, where VNC servers are started automatically
 when seeing QQuickWindows being exposed.
 
-To enable this you have to add the following line to your application code:
+A viewer connects to a window using the ports starting from 5900.
+F.e the second window can be found on 5901. In theory the number of viewers being
+connected to the same window is unlimited.
+
+You can enable VNC support by doing the initilization ithe application code or by
+running the application with the VNC platform proxy plugin.
+ 
+## Application code
+
+Add the following line somewhere in the code:
 
 ```
 #include <VncNamespace.h>
@@ -75,27 +84,19 @@ To enable this you have to add the following line to your application code:
 VNC::setup();
 ```
 
-A viewer connects to a window using the ports starting from 5900.
-F.e the second window can be found on 5901. In theory the number of viewers being
-connected to the same window is unlimited.
+If you want to get rid of the local windows you have several options:
 
-If you want to get rid of the local windows you can run the application with
-the "gbm" platform from: https://github.com/uwerat/qpagbm.
+- [gbm platform plugin](https://github.com/uwerat/qpagbm)
+- ( X11 ) the undocumented "offscreen" platform, that comes with Qt
+- ( EGLFS ) configuring eglfs ( headless )
 
-For X11 the undocumented "offscreen" platform, that comes with Qt, will do the job as well.
-Maybe it also possble to configure a headless mode for eglfs.
-
-# VNC platform integration proxy
+## VNC platform integration proxy
 
 If you do not want ( or can't ) touch application code you can load the VNC platform
-plugin proxy by using one of these keys: 
+plugin proxy by using one of these [keys](https://github.com/uwerat/vnc-eglfs/blob/main/platformproxy/metadata.json)
 
-    - vnceglfs
-    - vncxcb
-    - vncwayland
-
-The proxy simply does the initialization above before loading
-the real plugin following the "vnc" prefix.
+The [proxy](https://github.com/uwerat/vnc-eglfs/blob/main/platformproxy/VncProxyPlugin.cpp)
+simply does the initialization above before loading the real plugin following the "vnc" prefix.
 
 Assuming library and plugin are installed in "/usr/local/vnceglfs":
 
