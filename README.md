@@ -76,6 +76,7 @@ and does not differ much from what any VNC server implementation has to do.
 - Implemented:
 
     - mandatory parts of the RFB protocol
+
       This similar to what is supported by the Qt VNC plugin ( + mouse wheel, additional key codes )
 
     - [Tight/JPEG]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#tight-encoding )
@@ -85,14 +86,14 @@ and does not differ much from what any VNC server implementation has to do.
 
 - Planned
 
-    - Authentification
+    - [Authentification]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#security-types )
 
     - [H.264 ]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#open-h-264-encoding )
 
       Looks like support for H.264 has been [added recently]( https://github.com/TigerVNC/tigervnc/pull/1194 )
       to the [TigerVNC]( https://github.com/TigerVNC ) viewer.
 
-    - VA_API( https://en.wikipedia.org/wiki/Video_Acceleration_API )
+    - [VA_API]( https://en.wikipedia.org/wiki/Video_Acceleration_API )
 
       First attempts have been made with [hardware accelerated encoding]( https://intel.github.io/libva/group__api__enc__jpeg.html )
       with only limited "success" using the old driver ( export LIBVA_DRIVER_NAME=i965 )
@@ -101,7 +102,7 @@ and does not differ much from what any VNC server implementation has to do.
       - lines are shifted, when setting certain values for the quality
       - transferring the image to a VASurface includes down/up-loading from/to the GPU
 
-      Encoding seems to be more than twice as fast for an image of 600x600 pixels
+      But encoding seems to be more than twice as fast for an image of 600x600 pixels
       ( including the extra upload ) compared to libjpeg-turbo
 
     - Encoding the images on the GPU
@@ -155,5 +156,5 @@ Assuming library and plugin are installed in "/usr/local/vnceglfs":
 export QT_QPA_PLATFORM_PLUGIN_PATH="/usr/local/vnceglfs/plugins"
 export LD_LIBRARY_PATH="/usr/local/vnceglfs/lib"
 
-export QT_QPA_PLATFORM=vnceglfs # vncxcb, vncwayland
+export QT_QPA_PLATFORM=vnceglfs # vncxcb, vncwayland, vncoffscreen, vncgbm
 ```
