@@ -74,7 +74,7 @@ connected to the same window is unlimited.
 You can enable VNC support by doing the initilization ithe application code or by
 running the application with the VNC platform proxy plugin.
  
-## Application code
+### Application code
 
 Add the following line somewhere in the code:
 
@@ -90,7 +90,7 @@ If you want to get rid of the local windows you have several options:
 - using the undocumented "offscreen" platform, that comes with Qt ( X11 only )
 - reconfiguring a [headless](https://doc.qt.io/qt-5/embedded-linux.html#advanced-eglfs-kms-features) mode ( EGLFS only  )
 
-## VNC platform integration proxy
+### VNC platform integration proxy
 
 If you do not want ( or can't ) touch application code you can load the VNC platform
 plugin proxy by using one of these: [keys](https://github.com/uwerat/vnc-eglfs/blob/main/platformproxy/metadata.json).
