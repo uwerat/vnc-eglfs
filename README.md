@@ -10,24 +10,24 @@ While the motivation of this project is for EGLFS it also works with
 X11. I never tried Wayland myself, but it should be possible to
 get it running there too.
 
-# Who needs this
-
 Platforms like X11 and Wayland offer VNC support out of the box and when running
-one of them this project is probably not for you.
+one of them you have other options.
 
 Qt/Widget applications might have some native OpenGL code embedded, but in general
 the content of the screen is rendered by the CPU and the approach implemented in
 the [Qt VNC platform plugin]( https://doc.qt.io/qt-5/qpa.html ) that comes with Qt
 should be working just fine.
 
-But for [Qt/Quick](https://doc.qt.io/qt-6/qtquick-index.html) applications the
-situation is different as the [Qt VNC platform plugin]( https://doc.qt.io/qt-5/qpa.html )
-has some significant limitations.
+But for Qt/Quick applications on EGLFS none of the mentioned options offer
+a satisfying solution.
 
-# [Qt VNC platform plugin]( https://doc.qt.io/qt-5/qpa.html limitations
+# Limitations of the Qt VNC platform plugin
 
-The plugin does not support OpenGL at all and rendering is done with
-the fallback [software renderer]( https://doc.qt.io/QtQuick2DRenderer ).
+The main problem of the [Qt VNC platform plugin]( https://doc.qt.io/qt-5/qpa.html ) is
+that it does not support OpenGL. All rendering is done with the fallback
+[software renderer]( https://doc.qt.io/QtQuick2DRenderer ).
+This leads to the following
+[limitations]( https://doc.qt.io/QtQuick2DRenderer/qtquick2drenderer-limitations.html ):
 
 - native OpenGL code just fails 
 
@@ -36,7 +36,7 @@ the fallback [software renderer]( https://doc.qt.io/QtQuick2DRenderer ).
 
 - performance aspects
 
-    A minor issue for a VNC scenario, where the network bandwidth is the bottleneck
+    A minor issue for a VNC scenario, where the network bandwidth is usually the bottleneck
 
 The implementation of the [RFB]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst )
 is incomplete:
@@ -48,40 +48,51 @@ is incomplete:
    rate will choke the network connection.
 
    Conceptually it would be no big deal to add support of - at least - JPEG compression,
-   but making use of the harware accelerated encoding offered by modern GPUs 
+   but making use of the hardware accelerated encoding offered by modern GPUs 
    can't be done as efficient as when the image gets rendered on the GPU.
 
 A final problem is this VNC server is only available as platform plugin. So you
 can't control the application remotely and locally at the same time.
 Actually you always have to restart the application to switch between them.
 
-# The VncEglfs concept
+# VncEglfs
 
 VncEglfs starts VNC servers for QQuickWindows - what kind of corresponds to screens
 for EGLFS. Whenever a [frameSwapped](https://doc.qt.io/qt-6/qtquick-visualcanvas-scenegraph.html )
 signal happens the content of the window can be processed.
 
-An obvious problem of this approach is that the server does not know about what
-has changed and always sends fullscreen updates over the wire. This makes using compressed formats
-like JPEG or H.264 more or less mandatory.
+An obvious problem of this approach is that the server does not know about which
+parts of the window have changed and always sends fullscreen updates over the wire.
+This makes using compressed formats like JPEG or H.264 more or less mandatory.
 As nowadays many GPUs offer hardware accelerated encoding it should be possible
 to do the encoding on the GPU before downloading the frame.
 
-The rest is about mastering the details of the [RFB protocol]
-( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst ) and does not differ
-much from what any VNC server implementation has to do.
+The rest is about mastering the details of the
+[RFB protocol]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst )
+and does not differ much from what any VNC server implementation has to do.
 
 # Project status
 
 - Implemented:
 
-    - All mandatory parts of the RFB protocol ( similar to what is supported
-      by the Qt VNC plugin + mouse wheel and more keys ).
+    - mandatory parts of the RFB protocol
+      This similar to what is supported by the Qt VNC plugin ( + mouse wheel, additional key codes )
 
     - [Tight/JPEG]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#tight-encoding )
 
       Using the encoder from [Qt's image I/O system]( https://doc.qt.io/qt-6/qtimageformats-index.html),
       usually a wrapper for: [libjpeg-turbo]( https://libjpeg-turbo.org/ )
+
+- Planned
+
+    - Authentification
+
+    - [H.264 ]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#open-h-264-encoding )
+
+      Looks like support for H.264 has been [added recently]( https://github.com/TigerVNC/tigervnc/pull/1194 )
+      to the [TigerVNC]( https://github.com/TigerVNC ) viewer.
+
+    - VA_API( https://en.wikipedia.org/wiki/Video_Acceleration_API )
 
       First attempts have been made with [hardware accelerated encoding]( https://intel.github.io/libva/group__api__enc__jpeg.html )
       with only limited "success" using the old driver ( export LIBVA_DRIVER_NAME=i965 )
@@ -93,19 +104,10 @@ much from what any VNC server implementation has to do.
       Encoding seems to be more than twice as fast for an image of 600x600 pixels
       ( including the extra upload ) compared to libjpeg-turbo
 
-- Planned
-
-    - Authentification
-
-    - [H.264 ] ( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#open-h-264-encoding )
-
-      Looks like support for H.264 has been [added recently]( https://github.com/TigerVNC/tigervnc/pull/1194 )
-      to the [TigerVNC]( https://github.com/TigerVNC ) viewer.
-
     - Encoding the images on the GPU
 
-      If you are familiar with [VA_API]( https://en.wikipedia.org/wiki/Video_Acceleration_API ) and want to
-      help: let me know.
+      If you are familiar with [libva]( http://intel.github.io/libva/group__api__core.html)
+      and want to help: let me know.
       
 Code has been built for Qt >= 5.12, but it should be possible to support older
 releases with adding some ifdefs.
