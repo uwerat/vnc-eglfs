@@ -1,6 +1,7 @@
 moc
 obj
 lib
+plugins
 Makefile
 .qmake*
 
