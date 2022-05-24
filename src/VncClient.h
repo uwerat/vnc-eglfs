@@ -11,7 +11,7 @@
 class VncServer;
 class QTcpSocket;
 
-class VncClient : public QObject
+class VncClient final : public QObject
 {
     Q_OBJECT
 

@@ -47,7 +47,7 @@ namespace VncJpeg
         };
 
         return at( zigzag[i] );
-    };
+    }
 }
 
 namespace

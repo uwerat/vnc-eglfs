@@ -48,10 +48,13 @@ static void vncDestroy()
 
 static void vncInit()
 {
-    vncManager = new VncManager();
-    qAddPostRoutine( vncDestroy );
+    if ( vncManager == nullptr )
+    {
+        vncManager = new VncManager();
+        qAddPostRoutine( vncDestroy );
 
-    qDebug() << "VNC: QQuickWindows are accessible from ports >= 5900";
+        qDebug() << "VNC: QQuickWindows are accessible from ports >= 5900";
+    }
 }
 
 Q_COREAPP_STARTUP_FUNCTION( vncInit )

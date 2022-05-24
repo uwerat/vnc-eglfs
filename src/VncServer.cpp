@@ -155,8 +155,8 @@ void VncServer::addClient( qintptr fd )
 
     if ( auto tcpServer = qobject_cast< const QTcpServer* >( sender() ) )
     {
-        qInfo( "New VNC client attached on port %d, #clients %d",
-            tcpServer->serverPort(), m_threads.count() );
+        qInfo() << "New VNC client attached on port" << tcpServer->serverPort()
+            << ", #clients" << m_threads.count();
     }
 
     connect( thread, &QThread::finished, this, &VncServer::removeClient );
@@ -175,7 +175,7 @@ void VncServer::removeClient()
         if ( m_threads.isEmpty() && m_grabConnectionId )
             QObject::disconnect( m_grabConnectionId );
 
-        qInfo( "VNC client detached, #clients: %d",  m_threads.count() );
+        qInfo() << "VNC client detached, #clients:" << m_threads.count();
     }
 }
 

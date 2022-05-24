@@ -9,7 +9,33 @@ CONFIG += hide_symbols
 CONFIG += silent
 CONFIG += no_private_qt_headers_warning
 
+CONFIG += strict_c++
+CONFIG += c++11
+CONFIG += warn_on
+CONFIG += pedantic
+
 # CONFIG += videoacceleration
+
+pedantic {
+    linux-g++ | linux-g++-64 {
+
+        QMAKE_CXXFLAGS *= -pedantic-errors
+        QMAKE_CXXFLAGS *= -Wpedantic
+
+        QMAKE_CXXFLAGS *= -Wsuggest-override
+        QMAKE_CXXFLAGS *= -Wsuggest-final-types
+        QMAKE_CXXFLAGS *= -Wsuggest-final-methods
+
+        #QMAKE_CXXFLAGS *= -fanalyzer
+
+           QMAKE_CXXFLAGS += \
+                -isystem $$[QT_INSTALL_HEADERS]/QtCore \
+                -isystem $$[QT_INSTALL_HEADERS]/QtCore/$$[QT_VERSION]/QtCore \
+                -isystem $$[QT_INSTALL_HEADERS]/QtGui \
+                -isystem $$[QT_INSTALL_HEADERS]/QtGui/$$[QT_VERSION]/QtGui \
+                -isystem $$[QT_INSTALL_HEADERS]/QtNetwork \
+    }
+}
 
 MOC_DIR=moc
 OBJECTS_DIR=obj

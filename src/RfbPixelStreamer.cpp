@@ -16,7 +16,7 @@ namespace
     class PixelFormat
     {
       public:
-        inline constexpr bool isDefault() const noexcept
+        inline bool isDefault() const noexcept
         {
             constexpr PixelFormat other;
 
