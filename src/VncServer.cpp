@@ -167,13 +167,14 @@ void VncServer::removeClient()
 {
     if ( auto thread = qobject_cast< QThread* >( sender() ) )
     {
-        thread->quit();
-
         m_threads.removeOne( thread );
-        delete thread;
-
         if ( m_threads.isEmpty() && m_grabConnectionId )
             QObject::disconnect( m_grabConnectionId );
+
+        thread->quit();
+        thread->wait( 100 );
+
+        delete thread;
 
         qInfo() << "VNC client detached, #clients:" << m_threads.count();
     }
@@ -181,7 +182,7 @@ void VncServer::removeClient()
 
 static void grabWindow( QImage& frameBuffer )
 {
-#if 1
+#if 0
     #ifndef GL_BGRA
         #define GL_BGRA 0x80E1
     #endif
@@ -203,8 +204,9 @@ static void grabWindow( QImage& frameBuffer )
     extern QImage qt_gl_read_framebuffer(
         const QSize&, bool alpha_format, bool include_alpha );
 
+    const auto format = frameBuffer.format();
     frameBuffer = qt_gl_read_framebuffer( frameBuffer.size(), false, false );
-
+    frameBuffer.convertTo( format );
 #endif
 }
 
