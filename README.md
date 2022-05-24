@@ -26,17 +26,9 @@ a satisfying solution.
 The main problem of the [Qt VNC platform plugin]( https://doc.qt.io/qt-5/qpa.html ) is
 that it does not support OpenGL. All rendering is done with the fallback
 [software renderer]( https://doc.qt.io/QtQuick2DRenderer ).
-This leads to the following
+with the following
 [limitations]( https://doc.qt.io/QtQuick2DRenderer/qtquick2drenderer-limitations.html ):
-
-- native OpenGL code just fails 
-
-    - custom scene graph nodes usually do not have a fallback implementation
-    - shaders do not work in general
-
-- performance aspects
-
-    A minor issue for a VNC scenario, where the network bandwidth is usually the bottleneck
+Even worse: custom scene graph nodes usually do not offer a fallback implementation.
 
 The implementation of the [RFB]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst )
 is incomplete:
@@ -61,11 +53,13 @@ VncEglfs starts VNC servers for QQuickWindows - what kind of corresponds to scre
 for EGLFS. Whenever a [frameSwapped](https://doc.qt.io/qt-6/qtquick-visualcanvas-scenegraph.html )
 signal happens the content of the window can be processed.
 
-An obvious problem of this approach is that the server does not know about which
+An obvious problem of this approach is that the server does not know which
 parts of the window have changed and always sends fullscreen updates over the wire.
 This makes using compressed formats like JPEG or H.264 more or less mandatory.
+
 As nowadays many GPUs offer hardware accelerated encoding it should be possible
-to do the encoding on the GPU before downloading the frame.
+to do the encoding on the GPU before downloading the frame. This also avoids
+having expensive glReadPixels() operations.
 
 The rest is about mastering the details of the
 [RFB protocol]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst )
