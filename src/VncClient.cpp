@@ -17,13 +17,138 @@
 #include <qendian.h>
 #include <qwindow.h>
 #include <qtimer.h>
+#include <qmetaobject.h>
 
-enum ClientState
+#include <qloggingcategory.h>
+
+Q_LOGGING_CATEGORY( logRfb, "vnceglfs.rfb", QtCriticalMsg )
+Q_LOGGING_CATEGORY( logFb, "vnceglfs.fb", QtCriticalMsg )
+
+// export QT_LOGGING_RULES="vnceglfs.rfb.debug=true"
+
+namespace Rfb
 {
-    Protocol,
-    Init,
-    Connected
-};
+    Q_NAMESPACE
+
+    enum ClientState
+    {
+        Protocol,
+        Init,
+        Connected
+    };
+    Q_ENUM_NS( ClientState )
+
+    enum Encoding : qint64
+    {
+        // https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#encodings
+
+        Raw      = 0,
+        CopyRect = 1,
+        RRE      = 2,
+        CoRRE    = 4,
+        Hextile  = 5,
+        Zlib     = 6,
+        Tight    = 7,
+        ZlibHex  = 8,
+        ZRLE     = 16,
+        JPEG     = 21,
+        OpenH264 = 50,
+
+        TightPNG = -260,
+
+        DesktopSize = -223,
+        LastRect    = -224,
+        Cursor      = -239,
+        XCursor     = -240,
+
+        QEMUPointerMotionChange = -257,
+        QEMUExtendedKeyEvent    = -258,
+        QEMUAudio               = -259,
+        QEMULEDState            = -261,
+
+        GII                 = -305,
+        DesktopName         = -307,
+        ExtendedDesktopSize = -308,
+        XVP                 = -309,
+        Fence               = -312,
+        ContinuousUpdates   = -313,
+        CursorWithAlpha     = -314,
+
+        VMwareCursor              = 0x574d5664,
+        VMwareCursorState         = 0x574d5665,
+        VMwareCursorPosition      = 0x574d5666,
+        VMwareKeyRepeat           = 0x574d5667,
+        VMwareLEDState            = 0x574d5668,
+        VMwareDisplayModeChange   = 0x574d5669,
+        VMwareVirtualMachineState = 0x574d566a,
+
+        ExtendedClipboard = 0xc0a1e5ce,
+
+        Ultra         = 9,
+        Ultra2        = 10,
+        TRLE          = 15,
+        HitachiZYWRLE = 17,
+        H264          = 20,
+        JRLE          = 22,
+    };
+    Q_ENUM_NS( Encoding )
+}
+
+static inline QDebug operator<<( QDebug debug, const QVector< qint32 >& encodings )
+{
+    const auto mo = &Rfb::staticMetaObject;
+    const auto enumerator = mo->enumerator( mo->indexOfEnumerator( "Encoding" ) );
+
+    debug.nospace();
+
+    debug << "Encodings:";
+    for ( const auto encoding : encodings )
+    {
+        debug << "\n  ";
+
+        if ( encoding >= -512 && encoding <= -412 )
+        {
+            debug << "JPEGQuality: " << encoding;
+        }
+        else if ( encoding >= -32 && encoding <= -23 )
+        {
+            debug << "JPEGQualityLevel: " << encoding + 32;
+        }
+        else if ( encoding >= -768 && encoding <= -763 )
+        {
+            debug << "JPEGSubsamplingLevel: " << encoding;
+        }
+        else if ( encoding >= -256 && encoding <= -247 )
+        {
+            debug << "CompressionLevel: " << encoding + 256;
+        }
+        else if ( encoding >= 1024 && encoding <= 1099 )
+        {
+            debug << "RealVNC: " << encoding;
+        }
+        else if ( ( encoding >= -218 && encoding <= -33 )
+            || ( encoding >= -22 && encoding <= -1 ) )
+        {
+            debug << "TightOption: " << encoding;
+        }
+        else
+        {
+            if ( auto key = enumerator.valueToKey( encoding ) )
+            {
+                debug << key;
+            }
+            else
+            {
+                const auto hex = QString("0x") + QString::number( encoding, 16 );
+                debug << encoding << " ( " << hex << " )";
+            }
+        }
+    }
+    debug << "\n";
+    debug.space();
+
+    return debug;
+}
 
 class VncClient::PrivateData
 {
@@ -85,7 +210,8 @@ VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
     const char proto[] = "RFB 003.003\n";
     m_data->socket.sendString( proto, 12 );
 
-    m_data->state = Protocol;
+    m_data->state = Rfb::Protocol;
+    qCDebug( logRfb ) << "State" << m_data->state;
 }
 
 VncClient::~VncClient()
@@ -95,7 +221,11 @@ VncClient::~VncClient()
 
 void VncClient::markDirty()
 {
-    m_data->frameDirty = true;
+    if ( m_data->frameDirty == false )
+    {
+        qCDebug( logFb ) << "FB dirty";
+        m_data->frameDirty = true;
+    }
 }
 
 void VncClient::processClientData()
@@ -105,7 +235,7 @@ void VncClient::processClientData()
 
     auto socket = &m_data->socket;
 
-    if ( m_data->state == Protocol )
+    if ( m_data->state == Rfb::Protocol )
     {
         if ( socket->bytesAvailable() >= 12 )
         {
@@ -125,13 +255,15 @@ void VncClient::processClientData()
             };
 
             socket->sendUint32( None );
-            m_data->state = Init;
+            m_data->state = Rfb::Init;
+
+            qCDebug( logRfb ) << "State" << m_data->state;
         }
 
         return;
     }
 
-    if ( m_data->state == Init )
+    if ( m_data->state == Rfb::Init )
     {
         if ( socket->bytesAvailable() >= 1 )
         {
@@ -151,13 +283,15 @@ void VncClient::processClientData()
             socket->sendUint32( length );
             socket->sendString( name, length );
 
-            m_data->state = Connected;
+            m_data->state = Rfb::Connected;
+
+            qCDebug( logRfb ) << "State" << m_data->state;
         }
 
         return;
     }
 
-    if ( m_data->state == Connected )
+    if ( m_data->state == Rfb::Connected )
     {
         enum
         {
@@ -304,50 +438,33 @@ bool VncClient::handleSetEncodings()
 
     for ( int i = 0; i < count; ++i )
     {
-        // see: https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#encodings
-
-        enum Encoding
-        {
-            Raw = 0,
-            Tight = 7,
-
-            // pseudo encodings
-            Cursor = -239,
-            DesktopSize = -223
-        };
-
         const qint32 encoding = socket->receiveUint32();
         m_data->encodings += encoding;
 
-        if ( encoding == Tight )
+        if ( encoding == Rfb::Tight )
         {
             m_data->tightEnabled = true;
         }
-        if ( encoding == Cursor )
+        else if ( encoding == Rfb::Cursor )
         {
             m_data->cursorEnabled = true;
             updateCursor();
         }
-        else if ( encoding == DesktopSize )
+        else if ( encoding == Rfb::DesktopSize )
         {
             m_data->screenResizable = true;
         }
         else if ( encoding >= -32 && encoding <= -23 )
         {
             m_data->jpegLevel = 32 + encoding;
-#if 1
-            qDebug() << "JPEG, level:" << m_data->jpegLevel;
-#endif
         }
         else if ( encoding >= -512 && encoding <= -412 )
         {
-            qDebug() << "JPEG, level fine:" << 512 + encoding;
+            // TODO ...
         }
     }
 
-#if 0
-    qDebug() << m_data->encodings;
-#endif
+    qCDebug( logRfb ) << "Encodings\n" << m_data->encodings;
 
     m_data->pendingBytes = 0;
     return true;
@@ -370,10 +487,14 @@ bool VncClient::handleFrameBufferUpdateRequest()
         m_data->updateTimer.start();
     }
 
-    m_data->frameRequested = true;
-
     const bool incremental = socket->receiveUint8();
     (void)socket->readRect64();
+
+    if ( m_data->frameRequested == false )
+    {
+        m_data->frameRequested = true;
+        qCDebug( logFb ) << "FB requested, incremental:" << incremental;
+    }
 
     if ( !incremental )
         markDirty();
@@ -456,4 +577,5 @@ void VncClient::updateCursor()
     }
 }
 
+#include "VncClient.moc"
 #include "moc_VncClient.cpp"

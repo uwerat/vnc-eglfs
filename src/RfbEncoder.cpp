@@ -8,6 +8,10 @@
 #include <qimage.h>
 #include <qbuffer.h>
 #include <qimagewriter.h>
+#include <qelapsedtimer.h>
+#include <qloggingcategory.h>
+
+Q_LOGGING_CATEGORY( logEncoding, "vnceglfs.encode", QtCriticalMsg )
 
 class RfbEncoder::Encoder
 {
@@ -113,33 +117,29 @@ RfbEncoder::~RfbEncoder()
     delete m_encoder;
 }
 
-#define DEBUG_ENCODING 0
-
-#if DEBUG_ENCODING
-    #include <qelapsedtimer.h>
-#endif
 
 void RfbEncoder::encode( const QImage& image, const QRect& rect )
 {
-#if DEBUG_ENCODING
     QElapsedTimer timer;
-    timer.start();
-#endif
+
+    if ( logEncoding().isDebugEnabled() )
+        timer.start();
 
     if ( rect == QRect( 0, 0, image.width(), image.height() ) )
         m_encoder->encode( image, m_quality );
     else
         m_encoder->encode( image.copy( rect ), m_quality );
 
-#if DEBUG_ENCODING
-    const auto ms = timer.elapsed();
+    if ( logEncoding().isDebugEnabled() )
+    {
+        const auto ms = timer.elapsed();
 
-    qDebug() << "JPEG:" << "quality:" << m_quality
-        << "w:" << image.width() << "h:" << image.height()
-        << "bytes:" << image.sizeInBytes()
-        << "->" << m_encoder->encodedData().size()
-        << "ms: elapsed" << ms;
-#endif
+        qCDebug( logEncoding ) << "JPEG:" << "quality:" << m_quality
+            << "w:" << image.width() << "h:" << image.height()
+            << "bytes:" << image.sizeInBytes()
+            << "->" << m_encoder->encodedData().size()
+            << "ms: elapsed" << ms;
+    }
 }
 
 const QByteArray& RfbEncoder::encodedData() const

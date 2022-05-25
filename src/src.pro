@@ -14,7 +14,7 @@ CONFIG += c++11
 CONFIG += warn_on
 CONFIG += pedantic
 
-# CONFIG += debug
+CONFIG += debug
 
 # CONFIG += videoacceleration
 
