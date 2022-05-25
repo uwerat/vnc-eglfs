@@ -1,7 +1,7 @@
 TEMPLATE = lib
 TARGET   = qvnceglfs
 
-DEFINES += VNC_DLL VNC_MAKEDLL
+DEFINES += VNC_MAKEDLL
 
 QT += gui gui-private network
 
@@ -80,3 +80,13 @@ videoacceleration {
     CONFIG += link_pkgconfig
     PKGCONFIG += libva-drm libva
 }
+
+INSTALL_ROOT=/usr/local/qpagbm
+# INSTALL_ROOT=$$[QT_INSTALL_PREFIX]
+
+target.path = $${INSTALL_ROOT}/lib
+
+header_files.files = VncNamespace.h
+header_files.path = $${INSTALL_ROOT}/include
+
+INSTALLS += target header_files

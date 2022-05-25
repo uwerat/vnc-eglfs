@@ -11,16 +11,10 @@
 
 class QWindow;
 
-#ifdef VNC_DLL
-    #if defined( VNC_MAKEDLL )     // create a DLL library
-        #define VNC_EXPORT Q_DECL_EXPORT
-    #else                          // use a DLL library
-        #define VNC_EXPORT Q_DECL_IMPORT
-    #endif
-#endif
-
-#ifndef VNC_EXPORT
-    #define VNC_EXPORT
+#if defined( VNC_MAKEDLL )
+    #define VNC_EXPORT Q_DECL_EXPORT
+#else
+    #define VNC_EXPORT Q_DECL_IMPORT
 #endif
 
 namespace Vnc
