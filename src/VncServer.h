@@ -12,6 +12,7 @@
 #include <qpointer.h>
 
 class QWindow;
+class QTcpServer;
 
 class VncCursor
 {
@@ -32,6 +33,7 @@ class VncServer final : public QObject
     VncCursor cursor() const;
 
     QWindow* window() const;
+    int port() const;
 
   private Q_SLOTS:
     void updateFrameBuffer();
@@ -39,6 +41,8 @@ class VncServer final : public QObject
   private:
     void addClient( qintptr fd );
     void removeClient();
+
+    QTcpServer* m_tcpServer = nullptr;
 
     QPointer< QWindow > m_window;
     QVector< QThread* > m_threads;

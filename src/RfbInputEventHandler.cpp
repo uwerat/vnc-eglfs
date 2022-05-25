@@ -116,7 +116,7 @@ void Rfb::handlePointerEvent( const QPointF& pos, quint8 buttonMask, QWindow* wi
     else
     {
         Qt::MouseButtons buttons;
-    
+
         if ( buttonMask & ButtonLeft )
             buttons |= Qt::LeftButton;
 
@@ -142,7 +142,7 @@ void Rfb::handlePointerEvent( const QPointF& pos, quint8 buttonMask, QWindow* wi
         {
             eventType = ( buttons > oldButtons ) ?
                 QEvent::MouseButtonPress : QEvent::MouseButtonRelease;
-            
+
             const quint32 modified = buttons ^ oldButtons;
             // Q_ASSERT( qPopulationCount( modified ) == 1 );
             button = static_cast< Qt::MouseButton >( modified );
@@ -181,7 +181,7 @@ static QString keyText( quint32 qtkey, bool isLower, Qt::KeyboardModifiers modif
                 return QStringLiteral( "\r" );
         }
     }
-    
+
     switch( qtkey )
     {
         case Qt::Key_Backspace:
@@ -195,7 +195,7 @@ static QString keyText( quint32 qtkey, bool isLower, Qt::KeyboardModifiers modif
     {
         if ( isLower )
             qtkey -= 'A' - 'a';
-            
+
         return QString( static_cast< char >( qtkey ) );
     }
 

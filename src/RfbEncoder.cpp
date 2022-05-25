@@ -65,8 +65,8 @@ namespace
         EncoderVa()
         {
             m_vaEncoder.open();
-        }   
-        
+        }
+
         void encode( const QImage& image, int quality ) override
         {
             m_vaEncoder.encode( image.constBits(),
@@ -78,24 +78,24 @@ namespace
             m_vaEncoder.mapEncoded( data, size );
             m_encodedData.setRawData(
                 reinterpret_cast< const char* >( data ), size );
-        }       
-        
+        }
+
         const QByteArray& encodedData() const override
         {
             return m_encodedData;
-        }   
-        
+        }
+
         void release() override
         {
             m_encodedData.clear();
             m_vaEncoder.unmapEncoded();
         }
-        
+
       private:
         VncVaEncoder m_vaEncoder;
         QByteArray m_encodedData;
-    };  
-}   
+    };
+}
 
 #endif
 
