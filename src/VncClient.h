@@ -11,13 +11,16 @@
 class VncServer;
 class QTcpSocket;
 
-class VncClient : public QObject
+class VncClient final : public QObject
 {
     Q_OBJECT
 
   public:
     explicit VncClient( qintptr fd, VncServer* );
     ~VncClient() override;
+
+    void setTimerInterval( int ms );
+    int timerInterval() const;
 
     void markDirty();
     void updateCursor();

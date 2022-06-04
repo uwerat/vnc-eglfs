@@ -28,7 +28,7 @@ namespace VncJpeg
         Header( int width, int height, int quality );
 
         const uint8_t* buffer() const { return m_buffer; }
-        constexpr int count() const { return sizeof( m_buffer ); }
+        int count() const { return sizeof( m_buffer ); }
 
       private:
 

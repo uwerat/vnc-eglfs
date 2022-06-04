@@ -13,7 +13,7 @@ namespace
       public:
 
         QPlatformIntegration* create( const QString& system,
-            const QStringList& args, int &argc, char **argv ) override
+            const QStringList& args, int& argc, char** argv ) override
         {
             QPlatformIntegration* integration = nullptr;
 
@@ -27,7 +27,7 @@ namespace
             }
 
             if ( integration )
-                Vnc::setup();
+                Vnc::setAutoStartEnabled( true );
 
             return integration;
         }

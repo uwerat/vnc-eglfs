@@ -1,7 +1,7 @@
 TEMPLATE = lib
 TARGET   = qvnceglfs
 
-DEFINES += VNC_DLL VNC_MAKEDLL
+DEFINES += VNC_MAKEDLL
 
 QT += gui gui-private network
 
@@ -10,6 +10,34 @@ CONFIG += silent
 CONFIG += no_private_qt_headers_warning
 
 CONFIG += videoacceleration
+
+CONFIG += strict_c++
+CONFIG += c++11
+CONFIG += warn_on
+CONFIG += pedantic
+
+CONFIG += debug
+
+pedantic {
+    linux-g++ | linux-g++-64 {
+
+        QMAKE_CXXFLAGS *= -pedantic-errors
+        QMAKE_CXXFLAGS *= -Wpedantic
+
+        QMAKE_CXXFLAGS *= -Wsuggest-override
+        QMAKE_CXXFLAGS *= -Wsuggest-final-types
+        QMAKE_CXXFLAGS *= -Wsuggest-final-methods
+
+        #QMAKE_CXXFLAGS *= -fanalyzer
+
+           QMAKE_CXXFLAGS += \
+                -isystem $$[QT_INSTALL_HEADERS]/QtCore \
+                -isystem $$[QT_INSTALL_HEADERS]/QtCore/$$[QT_VERSION]/QtCore \
+                -isystem $$[QT_INSTALL_HEADERS]/QtGui \
+                -isystem $$[QT_INSTALL_HEADERS]/QtGui/$$[QT_VERSION]/QtGui \
+                -isystem $$[QT_INSTALL_HEADERS]/QtNetwork \
+    }
+}
 
 MOC_DIR=moc
 OBJECTS_DIR=obj
@@ -52,3 +80,13 @@ videoacceleration {
     CONFIG += link_pkgconfig
     PKGCONFIG += libva-drm libva
 }
+
+INSTALL_ROOT=/usr/local/qpagbm
+# INSTALL_ROOT=$$[QT_INSTALL_PREFIX]
+
+target.path = $${INSTALL_ROOT}/lib
+
+header_files.files = VncNamespace.h
+header_files.path = $${INSTALL_ROOT}/include
+
+INSTALLS += target header_files

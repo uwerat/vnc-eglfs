@@ -11,8 +11,13 @@
 #include <qopenglfunctions.h>
 #include <qwindow.h>
 #include <qthread.h>
+#include <qelapsedtimer.h>
+#include <qloggingcategory.h>
 
 #include <qpa/qplatformcursor.h>
+
+Q_LOGGING_CATEGORY( logGrab, "vnceglfs.grab", QtCriticalMsg )
+Q_LOGGING_CATEGORY( logConnection, "vnceglfs.connection" )
 
 namespace
 {
@@ -91,6 +96,8 @@ namespace
                 m_client->markDirty();
         }
 
+        VncClient* client() const { return m_client; }
+
       protected:
         void run() override
         {
@@ -119,8 +126,10 @@ VncServer::VncServer( int port, QWindow* window )
     auto tcpServer = new TcpServer( this );
     connect( tcpServer, &TcpServer::connectionRequested, this, &VncServer::addClient );
 
-    if( tcpServer->listen( QHostAddress::Any, port ) )
-        qInfo( "VncServer created on port %d", port);
+    m_tcpServer = tcpServer;
+
+    if( m_tcpServer->listen( QHostAddress::Any, port ) )
+        qCDebug( logConnection ) << "VncServer created on port" << port;
 }
 
 VncServer::~VncServer()
@@ -132,6 +141,11 @@ VncServer::~VncServer()
         thread->quit();
         thread->wait( 20 );
     }
+}
+
+int VncServer::port() const
+{
+    return m_tcpServer->serverPort();
 }
 
 void VncServer::addClient( qintptr fd )
@@ -149,15 +163,12 @@ void VncServer::addClient( qintptr fd )
 
         m_grabConnectionId = QObject::connect( m_window, SIGNAL(frameSwapped()),
             this, SLOT(updateFrameBuffer()), Qt::DirectConnection );
-        
+
         QMetaObject::invokeMethod( m_window, "update" );
     }
 
-    if ( auto tcpServer = qobject_cast< const QTcpServer* >( sender() ) )
-    {
-        qInfo( "New VNC client attached on port %d, #clients %d",
-            tcpServer->serverPort(), m_threads.count() );
-    }
+    qCDebug( logConnection ) << "New VNC client attached on port" << m_tcpServer->serverPort()
+        << "#clients" << m_threads.count();
 
     connect( thread, &QThread::finished, this, &VncServer::removeClient );
     thread->start();
@@ -167,21 +178,37 @@ void VncServer::removeClient()
 {
     if ( auto thread = qobject_cast< QThread* >( sender() ) )
     {
-        thread->quit();
-
         m_threads.removeOne( thread );
-        delete thread;
-
         if ( m_threads.isEmpty() && m_grabConnectionId )
             QObject::disconnect( m_grabConnectionId );
 
-        qInfo( "VNC client detached, #clients: %d",  m_threads.count() );
+        thread->quit();
+        thread->wait( 100 );
+
+        delete thread;
+
+        qCDebug( logConnection ) << "VNC client detached on port" << m_tcpServer->serverPort()
+            << "#clients:" << m_threads.count();
+    }
+}
+
+void VncServer::setTimerInterval( int ms )
+{
+    for ( auto thread : qAsConst( m_threads ) )
+    {
+        auto client = static_cast< ClientThread* >( thread )->client();
+        client->setTimerInterval( ms );
     }
 }
 
 static void grabWindow( QImage& frameBuffer )
 {
-#if 1
+    QElapsedTimer timer;
+
+    if ( logGrab().isDebugEnabled() )
+        timer.start();
+
+#if 0
     #ifndef GL_BGRA
         #define GL_BGRA 0x80E1
     #endif
@@ -203,9 +230,15 @@ static void grabWindow( QImage& frameBuffer )
     extern QImage qt_gl_read_framebuffer(
         const QSize&, bool alpha_format, bool include_alpha );
 
+    const auto format = frameBuffer.format();
     frameBuffer = qt_gl_read_framebuffer( frameBuffer.size(), false, false );
-
+    frameBuffer.convertTo( format );
 #endif
+
+    if ( logGrab().isDebugEnabled() )
+    {
+        qCDebug( logGrab ) << "grabWindow:" << timer.elapsed() << "ms";
+    }
 }
 
 void VncServer::updateFrameBuffer()

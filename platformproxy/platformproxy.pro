@@ -2,10 +2,13 @@ TEMPLATE = lib
 
 CONFIG += plugin
 CONFIG += silent
-CONFIG += hide_symbols
+CONFIG += warn_on
 
 CONFIG += hide_symbols
 CONFIG += no_private_qt_headers_warning
+
+CONFIG += strict_c++
+CONFIG += c++11
 
 QT += gui gui-private
 
@@ -14,8 +17,6 @@ OBJECTS_DIR=obj
 
 TARGET = $$qtLibraryTarget(vncproxy)
 DESTDIR = plugins/platforms
-
-DEFINES += VNC_DLL
 
 PROJECT_ROOT = $$clean_path( $$PWD/../src )
 
@@ -28,3 +29,9 @@ SOURCES += \
     VncProxyPlugin.cpp
 
 OTHER_FILES += metadata.json
+
+INSTALL_ROOT=/usr/local/vnceglfs
+# INSTALL_ROOT=$$[QT_INSTALL_PREFIX]
+
+target.path = $${INSTALL_ROOT}/plugins/platforms
+INSTALLS += target
