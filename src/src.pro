@@ -16,8 +16,6 @@ CONFIG += pedantic
 
 CONFIG += debug
 
-# CONFIG += videoacceleration
-
 pedantic {
     linux-g++ | linux-g++-64 {
 
@@ -63,25 +61,7 @@ SOURCES += \
     VncClient.cpp \
     VncNamespace.cpp \
 
-videoacceleration {
-
-    HEADERS += \
-        va/VncJpeg.h \
-        va/VncVaRenderer.h \
-        va/VncVaEncoder.h
-
-    SOURCES += \
-        va/VncJpeg.cpp \
-        va/VncVaRenderer.cpp \
-        va/VncVaEncoder.cpp
-
-    DEFINES += VNC_VA_ENCODER
-
-    CONFIG += link_pkgconfig
-    PKGCONFIG += libva-drm libva
-}
-
-INSTALL_ROOT=/usr/local/qpagbm
+INSTALL_ROOT=/usr/local/vnceglfs
 # INSTALL_ROOT=$$[QT_INSTALL_PREFIX]
 
 target.path = $${INSTALL_ROOT}/lib
