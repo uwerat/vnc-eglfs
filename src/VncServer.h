@@ -35,6 +35,8 @@ class VncServer final : public QObject
     QWindow* window() const;
     int port() const;
 
+    void setTimerInterval( int ms );
+
   private Q_SLOTS:
     void updateFrameBuffer();
 

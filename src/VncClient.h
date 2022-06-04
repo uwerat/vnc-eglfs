@@ -19,6 +19,9 @@ class VncClient final : public QObject
     explicit VncClient( qintptr fd, VncServer* );
     ~VncClient() override;
 
+    void setTimerInterval( int ms );
+    int timerInterval() const;
+
     void markDirty();
     void updateCursor();
 

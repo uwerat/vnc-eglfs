@@ -96,6 +96,8 @@ namespace
                 m_client->markDirty();
         }
 
+        VncClient* client() const { return m_client; }
+
       protected:
         void run() override
         {
@@ -187,6 +189,15 @@ void VncServer::removeClient()
 
         qCDebug( logConnection ) << "VNC client detached on port" << m_tcpServer->serverPort()
             << "#clients:" << m_threads.count();
+    }
+}
+
+void VncServer::setTimerInterval( int ms )
+{
+    for ( auto thread : qAsConst( m_threads ) )
+    {
+        auto client = static_cast< ClientThread* >( thread )->client();
+        client->setTimerInterval( ms );
     }
 }
 

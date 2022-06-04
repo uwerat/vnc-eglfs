@@ -1,128 +1,109 @@
 # VNC for Qt/Quick on EGLFS
 
-A VNC server for Qt/Quick applications on the EGLFS platform:
+This project implements a [VNC](https://en.wikipedia.org/wiki/Virtual_Network_Computing)
+server for [Qt/Quick](https://doc.qt.io/qt-6/qtquick-index.html) windows.
 
-- https://en.wikipedia.org/wiki/Virtual_Network_Computing
-- https://doc.qt.io/qt-6/qtquick-index.html
-- https://doc.qt.io/qt-6/embedded-linux.html
+The basic idea of this server is to grab each frame from the GPU and to forward it
+to the [RFB protocol]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst ).<br>
+This implementation is not affected by [limitions]( https://doc.qt.io/QtQuick2DRenderer/qtquick2drenderer-limitations.html )
+of the [software renderer]( https://doc.qt.io/QtQuick2DRenderer ) and allows having native OpenGL code
+in application code ( custom scene graph nodes ).
 
-While the motivation of this project is for EGLFS it also works with
-X11. I never tried Wayland myself, but it should be possible to
-get it running there too.
+As the [Qt/Quick](https://doc.qt.io/qt-6/qtquick-index.html) technology is for
+"fluid and dynamic user interfaces" the VNC server has to be able to forward
+full updates ( f.e. fade in/out ) with an acceptable rate to the viewer, what
+makes [image compression]( https://en.wikipedia.org/wiki/Image_compression) more or less mandatory.
+Fortunately modern [GPUs](https://en.wikipedia.org/wiki/Graphics_processing_unit) usually offer
+[encoding]( https://en.wikipedia.org/wiki/Graphics_processing_unit#GPU_accelerated_video_decoding_and_encoding)
+for [JPEG]( https://en.wikipedia.org/wiki/JPEG ) and [H.264]( https://en.wikipedia.org/wiki/Advanced_Video_Coding ).
+Encoding on the GPU also avoids the expensive calls of
+[glReadPixels](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glReadPixels.xhtml) for each frame.
 
-Platforms like X11 and Wayland offer VNC support out of the box and when running
-one of them you have other options.
+Obvious limitations:
 
-Qt/Widget applications might have some native OpenGL code embedded, but in general
-the content of the screen is rendered by the CPU and the approach implemented in
-the [Qt VNC platform plugin]( https://doc.qt.io/qt-5/qpa.html ) that comes with Qt
-should be working just fine.
+- no partial updates
 
-But for Qt/Quick applications on EGLFS none of the mentioned options offer
-a satisfying solution.
+    A VNC server always transfers complete frames without trying to optimize for partial updates.
+    Despite the fact that there is no ( at least I do not know one ) unexpensive way to identify
+    the update regions it would not help much for situations like swiping, fading in/out etc.
+    Of course this leads to more traffic than necessary for other situations like pressing a button.
+    Using a compression like [H.264]( https://en.wikipedia.org/wiki/Advanced_Video_Coding ),
+    that is using differences between frames, might be the best solution.
 
-# Limitations of the Qt VNC platform plugin
+- windows instead of screens
 
-The main problem of the [Qt VNC platform plugin]( https://doc.qt.io/qt-5/qpa.html ) is
-that it does not support OpenGL. All rendering is done with the fallback
-[software renderer]( https://doc.qt.io/QtQuick2DRenderer ).
-with the following
-[limitations]( https://doc.qt.io/QtQuick2DRenderer/qtquick2drenderer-limitations.html ):
-Even worse: custom scene graph nodes usually do not offer a fallback implementation.
+    Usually VNC is used to mirror a complete screen/desktop with several windows
+    from different applications. However the "recommended plugin for modern Embedded Linux devices"
+    [EGLFS]( https://doc.qt.io/qt-6/embedded-linux.html ) only supports top level windows
+    in fullscreen mode - what kind of equals windows and screens.
+    For other platforms - like xcb or wayland - good solutions for mirroring a desktop are
+    available.
 
-The implementation of the [RFB]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst )
-is incomplete:
+# Project Status
 
--  No encodings beside [raw]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#raw-encoding )
+The current status of the implementation was tested for Qt >= 5.12 with
+remote connections to an application running on EGLFS and XCB.
 
-   In modern user interfaces you often have smooth transitions ( fading/sliding in/out )
-   with full screen updates at 60Hz. Sending uncompressed data with a reasonable update
-   rate will choke the network connection.
+Numbers depend on the capabilities of the devices and the size/content of the window,
+but on my test system ( Intel i7-8559U ) I was able to display a window with 800x800 pixels
+with >= 20fps remotely, when JPEG compression is enabled.
+The number was found by running <em>xtigervncviewer -Log '*:stderr:100'</em> as viewer.
 
-   Conceptually it would be no big deal to add support of - at least - JPEG compression,
-   but making use of the hardware accelerated encoding offered by modern GPUs 
-   can't be done as efficient as when the image gets rendered on the GPU.
+These features are implemented:
 
-A final problem is this VNC server is only available as platform plugin. So you
-can't control the application remotely and locally at the same time.
-Actually you always have to restart the application to switch between them.
+- mandatory parts of the RFB protocol
 
-# VncEglfs
+    This similar to what is supported by the Qt VNC plugin ( + mouse wheel, additional key codes )
 
-VncEglfs starts VNC servers for QQuickWindows - what kind of corresponds to screens
-for EGLFS. Whenever a [frameSwapped](https://doc.qt.io/qt-6/qtquick-visualcanvas-scenegraph.html )
-signal happens the content of the window can be processed.
+- [Tight/JPEG]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#tight-encoding )
 
-An obvious problem of this approach is that the server does not know which
-parts of the window have changed and always sends fullscreen updates over the wire.
-This makes using compressed formats like JPEG or H.264 more or less mandatory.
+    Using the encoder from [Qt's image I/O system]( https://doc.qt.io/qt-6/qtimageformats-index.html),
+    usually a wrapper for: [libjpeg-turbo]( https://libjpeg-turbo.org/ )
 
-As nowadays many GPUs offer hardware accelerated encoding it should be possible
-to do the encoding on the GPU before downloading the frame. This also avoids
-having expensive glReadPixels() operations.
+The following important parts are missing:
 
-The rest is about mastering the details of the
-[RFB protocol]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst )
-and does not differ much from what any VNC server implementation has to do.
+- [Authentification]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#security-types )
 
-# Project status
+- [H.264 ]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#open-h-264-encoding )
 
-- Implemented:
+    Looks like support for H.264 has been [added recently]( https://github.com/TigerVNC/tigervnc/pull/1194 )
+    to the [TigerVNC]( https://github.com/TigerVNC ) viewer.
 
-    - mandatory parts of the RFB protocol
+- hardware video acceleration: [VA_API]( https://en.wikipedia.org/wiki/Video_Acceleration_API )
 
-      This similar to what is supported by the Qt VNC plugin ( + mouse wheel, additional key codes )
-
-    - [Tight/JPEG]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#tight-encoding )
-
-      Using the encoder from [Qt's image I/O system]( https://doc.qt.io/qt-6/qtimageformats-index.html),
-      usually a wrapper for: [libjpeg-turbo]( https://libjpeg-turbo.org/ )
-
-- Planned
-
-    - [Authentification]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#security-types )
-
-    - [H.264 ]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#open-h-264-encoding )
-
-      Looks like support for H.264 has been [added recently]( https://github.com/TigerVNC/tigervnc/pull/1194 )
-      to the [TigerVNC]( https://github.com/TigerVNC ) viewer.
-
-    - [VA_API]( https://en.wikipedia.org/wiki/Video_Acceleration_API )
-
-      First attempts have been made with [hardware accelerated encoding]( https://intel.github.io/libva/group__api__enc__jpeg.html )
-      with only limited "success" using the old driver ( export LIBVA_DRIVER_NAME=i965 )
-
-      - colors are wrong
-      - lines are shifted, when setting certain values for the quality
-      - transferring the image to a VASurface includes down/up-loading from/to the GPU
-
-      But encoding seems to be more than twice as fast for an image of 600x600 pixels
-      ( including the extra upload ) compared to libjpeg-turbo
-
-    - Encoding the images on the GPU
-
-      If you are familiar with [libva]( http://intel.github.io/libva/group__api__core.html)
-      and want to help: let me know.
-      
-Code has been built for Qt >= 5.12, but it should be possible to support older
-releases with adding some ifdefs.
+    Without compressing the frames early on the GPU the performance of the pipeline suffers
+    from expensive glReadPixels calls and what is needed to compress the image on the CPU.<br>
+    If you are familiar with [libva]( http://intel.github.io/libva/group__api__core.html)
+    and want to help: let me know.
 
 # How to use
 
-Public APIs have not yet been decided and at the moment you can only use
-the library in a specific mode, where VNC servers are started automatically
-when seeing QQuickWindows being exposed.
+There are 2 way how to enable VNC support for an applation:
 
-A viewer connects to a window using the ports starting from 5900.
-F.e the second window can be found on 5901. In theory the number of viewers being
-connected to the same window is unlimited.
+- [C++ API]( https://github.com/uwerat/vnc-eglfs/blob/main/src/VncNamespace.h )
 
-You can enable VNC support by doing the initilization ithe application code or by
-running the application with the VNC platform proxy plugin.
- 
+    The C++ API allows to configure, start and stop a VNC servers individually.
+
+- [VNC platform integration proxy]( https://github.com/uwerat/vnc-eglfs/blob/main/platformproxy/VncProxyPlugin.cpp )
+
+    The VNC platform proxy allows to start VNC servers for applications that can't be modified
+    or recompiled.
+
+Both solutions are affected by the following environment variables:
+
+- QVNC_GL_PORT
+
+   The first unused port >= $QVNC_GL_PORT will be used when starting a server
+
+- QVNC_GLTIMER_INTERVAL
+
+   each server is periodically checking if a new frame is available
+   and the viewer is ready to accept it. Increasing the interval might
+   decrease the number of updates being displayed in the viewer.
+
 ### Application code
 
-Add the following line somewhere in the code:
+The most simple way to enable VNC support is to add the following line somewhere:
 
 ```
 #include <VncNamespace.h>

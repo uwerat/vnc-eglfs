@@ -37,12 +37,39 @@ namespace Vnc
         port >= initial port will be used when starting a server.
 
         The default value can be initialized by the environment variable
-        VNC_PORT. If VNC_PORT is not set the default value is 5900.
+        QVNC_GL_PORT. If QVNC_GL_PORT is not set the default value is 5900.
 
         \sa setInitialPort()
         \return initial port
      */
     VNC_EXPORT int initialPort();
+
+    /*!
+        \brief Set the timer interval for sending framebuffer updates
+
+        The server is periodically checking if a new frame is available
+        and the viewer is ready to accept it. Increasing the interval might
+        decrease the number of updates being displayed in the viewer.
+
+        \param ms Interval in miliseconds
+
+        \note The flow control of the RFB protocol prevents the server/viewer
+              connection from being choked by too many updates.
+
+        \sa timerInterval()
+     */
+    VNC_EXPORT void setTimerInterval( int ms );
+
+    /*!
+        \brief Timer interval for sending framebuffer updates
+
+        The default value is initialized by the environment variable
+        QVNC_GL_TIMER_INTERVAL. If QVNC_GLTIMER_INTERVAL is not set the
+        default value is 30.
+
+        \sa setTimerInterval()
+     */
+    VNC_EXPORT int timerInterval();
 
     /*!
         \brief Enable the autoStart mode

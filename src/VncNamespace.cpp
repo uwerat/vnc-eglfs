@@ -21,6 +21,9 @@ namespace
         void setAutoStartEnabled( bool );
         bool isAutoStartEnabled() const;
 
+        void setTimerInterval( int ms );
+        int timerInterval() const;
+
         void setInitialPort( int );
         int initialPort() const;
 
@@ -39,8 +42,9 @@ namespace
         bool isPortUsed( int port ) const;
 
         bool m_autoStart = false;
+        int m_timerInterval = 30;
 
-        mutable int m_port = -1;
+        int m_port = -1;
         QVector< VncServer* > m_servers; // usually <= 1
     };
 
@@ -59,6 +63,17 @@ namespace
 
 VncManager::VncManager()
 {
+    bool ok;
+
+    m_port = qEnvironmentVariableIntValue( "QVNC_GL_PORT", &ok );
+    if ( !ok )
+        m_port = 5900; // default port for VNC
+
+    m_timerInterval = qEnvironmentVariableIntValue( "QVNC_GL_TIMER_INTERVAL", &ok );
+    if ( !ok )
+        m_timerInterval = 30;
+
+    m_timerInterval = qMax( m_timerInterval, 10 );
 }
 
 VncManager::~VncManager()
@@ -161,6 +176,22 @@ bool VncManager::eventFilter( QObject* object, QEvent* event )
     return QObject::eventFilter( object, event );
 }
 
+void VncManager::setTimerInterval( int ms )
+{
+    ms = qMax( ms, 10 );
+    if ( ms != m_timerInterval )
+    {
+        m_timerInterval = ms;
+        for ( auto server : m_servers )
+            server->setTimerInterval( ms );
+    }
+}
+
+int VncManager::timerInterval() const
+{
+    return m_timerInterval;
+}
+
 void VncManager::setInitialPort( int port )
 {
     if ( port >= 0 )
@@ -169,15 +200,6 @@ void VncManager::setInitialPort( int port )
 
 int VncManager::initialPort() const
 {
-    if ( m_port < 0 )
-    {
-        bool ok;
-        m_port = qEnvironmentVariableIntValue( "VNC_PORT", &ok );
-
-        if ( !ok )
-            m_port = 5900; // default port for VNC
-    }
-
     return m_port;
 }
 
@@ -213,6 +235,9 @@ Q_GLOBAL_STATIC( VncManager, vncManager )
 
 namespace Vnc
 {
+    void setTimerInterval( int ms ) { vncManager->setTimerInterval( ms ); }
+    int timerInterval() { return vncManager->timerInterval(); }
+
     void setInitialPort( int port ) { vncManager->setInitialPort( port ); }
     int initialPort() { return vncManager->initialPort(); }
 

@@ -219,6 +219,16 @@ VncClient::~VncClient()
     m_data->socket.close();
 }
 
+void VncClient::setTimerInterval( int ms )
+{
+    m_data->updateTimer.setInterval( ms );
+}
+
+int VncClient::timerInterval() const
+{
+    return m_data->updateTimer.interval();
+}
+
 void VncClient::markDirty()
 {
     if ( m_data->frameDirty == false )
