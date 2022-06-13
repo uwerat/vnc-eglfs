@@ -232,7 +232,13 @@ static void grabWindow( QImage& frameBuffer )
 
     const auto format = frameBuffer.format();
     frameBuffer = qt_gl_read_framebuffer( frameBuffer.size(), false, false );
+
+#if QT_VERSION < QT_VERSION_CHECK( 5, 13, 0 )
+    frameBuffer = frameBuffer.convertToFormat( format );
+#else
     frameBuffer.convertTo( format );
+#endif
+
 #endif
 
     if ( logGrab().isDebugEnabled() )
