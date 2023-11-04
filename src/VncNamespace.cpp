@@ -245,7 +245,7 @@ namespace Vnc
     bool isAutoStartEnabled() { return vncManager->isAutoStartEnabled(); }
 
     bool startServer( QWindow* w, int port ) { return vncManager->startServer( w, port ); }
-    void stopServer( QWindow* w ) { return vncManager->stopServer( w ); }
+    void stopServer( const QWindow* w ) { vncManager->stopServer( w ); }
 
     QList< QWindow* > windows() { return vncManager->windows(); }
     int serverPort( const QWindow* w ) { return vncManager->serverPort( w ); }
