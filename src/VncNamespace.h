@@ -110,7 +110,7 @@ namespace Vnc
         \param window Window mirrored by a server
         \sa setAutoStartEnabled(), startServer()
      */
-    VNC_EXPORT bool stopServer( const QWindow* window );
+    VNC_EXPORT void stopServer( const QWindow* window );
 
     /*!
         \return Port used by the VNC server of window
