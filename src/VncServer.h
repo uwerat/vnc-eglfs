@@ -29,6 +29,15 @@ class VncServer final : public QObject
     VncServer( int port, QWindow* );
     ~VncServer() override;
 
+    void setName( const QString& name )
+    {
+        m_name = name;
+    }
+    QString name() const
+    {
+        return m_name;
+    }
+
     QImage frameBuffer() const;
     VncCursor cursor() const;
 
@@ -45,6 +54,7 @@ class VncServer final : public QObject
     void removeClient();
 
     QTcpServer* m_tcpServer = nullptr;
+    QString m_name{ "VNC Server for Qt/Quick on EGLFS" };
 
     QPointer< QWindow > m_window;
     QVector< QThread* > m_threads;

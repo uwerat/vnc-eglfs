@@ -83,6 +83,7 @@ namespace
         ClientThread( qintptr socketDescriptor, VncServer* server )
             : QThread( server )
             , m_socketDescriptor( socketDescriptor )
+            , m_name(server->name())
         {
         }
 
@@ -102,6 +103,7 @@ namespace
         void run() override
         {
             VncClient client( m_socketDescriptor, qobject_cast< VncServer* >( parent() ) );
+            client.setName(m_name);
             connect( &client, &VncClient::disconnected, this, &QThread::quit );
 
             m_client = &client;
@@ -112,6 +114,7 @@ namespace
       private:
         VncClient* m_client = nullptr;
         const qintptr m_socketDescriptor;
+        QString m_name;
     };
 }
 

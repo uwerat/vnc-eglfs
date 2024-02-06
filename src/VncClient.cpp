@@ -164,6 +164,7 @@ class VncClient::PrivateData
     }
 
     VncServer* server;
+    QString name;
 
     RfbSocket socket;
     RfbPixelStreamer pixelStreamer;
@@ -217,6 +218,16 @@ VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
 VncClient::~VncClient()
 {
     m_data->socket.close();
+}
+
+void VncClient::setName( const QString& name )
+{
+    m_data->name = name;
+}
+
+QString VncClient::name() const
+{
+    return m_data->name;
 }
 
 void VncClient::setTimerInterval( int ms )
@@ -287,11 +298,10 @@ void VncClient::processClientData()
             socket->sendSize32( m_data->window()->size() );
             m_data->pixelStreamer.sendServerFormat( socket );
 
-            const char name[] = "VNC Server for Qt/Quick on EGLFS";
-            const auto length = sizeof( name ) - 1;
+            auto name = m_data->name.toUtf8();
 
-            socket->sendUint32( length );
-            socket->sendString( name, length );
+            socket->sendUint32( name.length() );
+            socket->sendString( name.data(), name.length() );
 
             m_data->state = Rfb::Connected;
 

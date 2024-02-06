@@ -27,6 +27,9 @@ namespace
         void setInitialPort( int );
         int initialPort() const;
 
+        void setName( const QString& name );
+        QString name() const;
+
         bool startServer( QWindow*, int port );
         void stopServer( const QWindow* );
 
@@ -45,6 +48,7 @@ namespace
         int m_timerInterval = 30;
 
         int m_port = -1;
+        QString m_name;
         QVector< VncServer* > m_servers; // usually <= 1
     };
 
@@ -95,7 +99,10 @@ bool VncManager::startServer( QWindow* window, int port )
     if ( port < 0 )
         port = nextPort();
 
-    m_servers += new VncServer( port, window );
+    auto s = new VncServer( port, window );
+    if ( !name().isEmpty() )
+        s->setName( name() );
+    m_servers += s;
     return true;
 }
 
@@ -203,6 +210,20 @@ int VncManager::initialPort() const
     return m_port;
 }
 
+void VncManager::setName( const QString& name )
+{
+    m_name = name;
+    for ( auto s : m_servers )
+    {
+        s->setName( name );
+    }
+}
+
+QString VncManager::name() const
+{
+    return m_name;
+}
+
 void VncManager::setAutoStartEnabled( bool on )
 {
     if ( on == m_autoStart )
@@ -240,6 +261,9 @@ namespace Vnc
 
     void setInitialPort( int port ) { vncManager->setInitialPort( port ); }
     int initialPort() { return vncManager->initialPort(); }
+
+    void setName( const QString &name ) { vncManager->setName( name ); }
+    QString name() { return vncManager->name(); }
 
     void setAutoStartEnabled( bool on ) { vncManager->setAutoStartEnabled( on ); }
     bool isAutoStartEnabled() { return vncManager->isAutoStartEnabled(); }

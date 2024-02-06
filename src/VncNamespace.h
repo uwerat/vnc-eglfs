@@ -44,6 +44,17 @@ namespace Vnc
      */
     VNC_EXPORT int initialPort();
 
+
+    /*!
+     * \brief Name of the Screen in ServerInit VNC message
+     *
+     * When set this name will be used in the ServerInit message
+     * RFC6143 7.3.2
+     * \param name
+     */
+    VNC_EXPORT void setName( const QString &name );
+    VNC_EXPORT QString name();
+
     /*!
         \brief Set the timer interval for sending framebuffer updates
 
