@@ -84,6 +84,7 @@ namespace
             : QThread( server )
             , m_socketDescriptor( socketDescriptor )
             , m_name(server->name())
+            , m_password(server->password())
         {
         }
 
@@ -104,6 +105,7 @@ namespace
         {
             VncClient client( m_socketDescriptor, qobject_cast< VncServer* >( parent() ) );
             client.setName(m_name);
+            client.setPassword(m_password);
             connect( &client, &VncClient::disconnected, this, &QThread::quit );
 
             m_client = &client;
@@ -115,6 +117,7 @@ namespace
         VncClient* m_client = nullptr;
         const qintptr m_socketDescriptor;
         QString m_name;
+        QByteArray m_password;
     };
 }
 

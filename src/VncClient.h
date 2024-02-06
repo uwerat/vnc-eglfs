@@ -22,6 +22,8 @@ class VncClient final : public QObject
     void setName( const QString& name );
     QString name() const;
 
+    void setPassword( const QByteArray& password );
+
     void setTimerInterval( int ms );
     int timerInterval() const;
 

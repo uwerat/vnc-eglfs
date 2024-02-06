@@ -13,11 +13,12 @@
 #include <qtcpsocket.h>
 
 #include <qcoreapplication.h>
-#include <qvarlengtharray.h>
 #include <qendian.h>
-#include <qwindow.h>
-#include <qtimer.h>
 #include <qmetaobject.h>
+#include <qrandom.h>
+#include <qtimer.h>
+#include <qvarlengtharray.h>
+#include <qwindow.h>
 
 #include <qloggingcategory.h>
 
@@ -26,6 +27,80 @@ Q_LOGGING_CATEGORY( logFb, "vnceglfs.fb", QtCriticalMsg )
 
 // export QT_LOGGING_RULES="vnceglfs.rfb.debug=true"
 
+#include <QDebug>
+#include <openssl/evp.h>
+#include <openssl/evperr.h>
+#if ( OPENSSL_VERSION_NUMBER >= 0x30000000L )
+#include <openssl/provider.h>
+#endif
+
+// 11001010 -> 01010011
+static unsigned char reverseByte( unsigned char b )
+{
+    b = ( b & 0xF0 ) >> 4 | ( b & 0x0F ) << 4;
+    b = ( b & 0xCC ) >> 2 | ( b & 0x33 ) << 2;
+    b = ( b & 0xAA ) >> 1 | ( b & 0x55 ) << 1;
+    return b;
+}
+
+static int encrypt_rfbdes( unsigned char* out, int* out_len, const unsigned char key[8],
+                           const unsigned char* in, const size_t in_len )
+{
+    int result = 0;
+    EVP_CIPHER_CTX* des = NULL;
+    unsigned char mungedkey[8];
+    int i;
+#if ( OPENSSL_VERSION_NUMBER >= 0x30000000L )
+    OSSL_PROVIDER* providerLegacy = NULL;
+    OSSL_PROVIDER* providerDefault = NULL;
+#endif
+
+    for ( i = 0; i < 8; i++ )
+        mungedkey[i] = reverseByte( key[i] );
+
+#if ( OPENSSL_VERSION_NUMBER >= 0x30000000L )
+    /* Load Multiple providers into the default (NULL) library context */
+    if ( !( providerLegacy = OSSL_PROVIDER_load( NULL, "legacy" ) ) )
+        goto out;
+    if ( !( providerDefault = OSSL_PROVIDER_load( NULL, "default" ) ) )
+        goto out;
+#endif
+
+    if ( !( des = EVP_CIPHER_CTX_new() ) )
+        goto out;
+    if ( !EVP_EncryptInit_ex( des, EVP_des_ecb(), NULL, mungedkey, NULL ) )
+        goto out;
+
+    if ( !EVP_EncryptUpdate( des, out, out_len, in, in_len ) )
+        goto out;
+
+    result = 1;
+
+out:
+    if ( des )
+        EVP_CIPHER_CTX_free( des );
+#if ( OPENSSL_VERSION_NUMBER >= 0x30000000L )
+    if ( providerLegacy )
+        OSSL_PROVIDER_unload( providerLegacy );
+    if ( providerDefault )
+        OSSL_PROVIDER_unload( providerDefault );
+#endif
+    return result;
+}
+
+static QByteArray encrypt( const QByteArray& key, const QByteArray& message )
+{
+    QByteArray output;
+    output.resize( message.size() );
+    int outlen = output.size();
+
+    encrypt_rfbdes( reinterpret_cast< unsigned char* >( output.data() ), &outlen,
+                    reinterpret_cast< const unsigned char* >( key.constData() ),
+                    reinterpret_cast< const unsigned char* >( message.constData() ),
+                    message.size() );
+    return output;
+}
+
 namespace Rfb
 {
     Q_NAMESPACE
@@ -33,6 +108,7 @@ namespace Rfb
     enum ClientState
     {
         Protocol,
+        Challenge,
         Init,
         Connected
     };
@@ -189,6 +265,9 @@ class VncClient::PrivateData
     bool frameDirty = true;
 
     QTimer updateTimer;
+
+    QByteArray challenge;
+    QByteArray password;
 };
 
 VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
@@ -228,6 +307,21 @@ void VncClient::setName( const QString& name )
 QString VncClient::name() const
 {
     return m_data->name;
+}
+
+void VncClient::setPassword( const QByteArray& password )
+{
+    if ( password.isEmpty() )
+    {
+        m_data->password.clear();
+    }
+    else
+    {
+        m_data->password.fill( 0x00, 8 );
+        const auto min = std::min( password.length(), 8 );
+        for ( int i = 0; i < min; ++i )
+            m_data->password[i] = password[i];
+    }
 }
 
 void VncClient::setTimerInterval( int ms )
@@ -275,13 +369,44 @@ void VncClient::processClientData()
                 VNC = 2
             };
 
-            socket->sendUint32( None );
-            m_data->state = Rfb::Init;
+            Authentification auth = m_data->password.isEmpty() ? None : VNC;
+            socket->sendUint32( auth );
+
+            if ( auth == None )
+                m_data->state = Rfb::Init;
+            else
+            {
+                auto r = QRandomGenerator::system();
+                m_data->challenge.resize( 16 );
+                r->generate( m_data->challenge.begin(), m_data->challenge.end() );
+                socket->sendByteArray( m_data->challenge );
+                m_data->state = Rfb::Challenge;
+            }
 
             qCDebug( logRfb ) << "State" << m_data->state;
         }
 
         return;
+    }
+
+    if ( m_data->state == Rfb::Challenge )
+    {
+        if ( socket->bytesAvailable() >= 16 )
+        {
+            char response[16];
+            socket->readString( response, 16 );
+            QByteArray resp( response, 16 );
+            auto calc = encrypt( m_data->password, m_data->challenge );
+            if ( resp != calc )
+            {
+                socket->sendUint32( 0x00000001 );
+            }
+            else
+            {
+                socket->sendUint32( 0x00000000 );
+                m_data->state = Rfb::Init;
+            }
+        }
     }
 
     if ( m_data->state == Rfb::Init )

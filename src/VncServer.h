@@ -10,6 +10,7 @@
 #include <qvector.h>
 #include <qmutex.h>
 #include <qpointer.h>
+#include <qbytearray.h>
 
 class QWindow;
 class QTcpServer;
@@ -38,6 +39,15 @@ class VncServer final : public QObject
         return m_name;
     }
 
+    void setPassword( const QByteArray& password )
+    {
+        m_password = password;
+    }
+    QByteArray password() const
+    {
+        return m_password;
+    }
+
     QImage frameBuffer() const;
     VncCursor cursor() const;
 
@@ -55,6 +65,7 @@ class VncServer final : public QObject
 
     QTcpServer* m_tcpServer = nullptr;
     QString m_name{ "VNC Server for Qt/Quick on EGLFS" };
+    QByteArray m_password;
 
     QPointer< QWindow > m_window;
     QVector< QThread* > m_threads;

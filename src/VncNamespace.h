@@ -56,6 +56,13 @@ namespace Vnc
     VNC_EXPORT QString name();
 
     /*!
+     * \brief Password for VNC Authentication RFC6143 7.2.2
+     * \param password up to 8 char password. Empty...no Authentication
+     */
+    VNC_EXPORT void setPassword( const QByteArray &password );
+    VNC_EXPORT QByteArray password();
+
+    /*!
         \brief Set the timer interval for sending framebuffer updates
 
         The server is periodically checking if a new frame is available
