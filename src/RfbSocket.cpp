@@ -7,7 +7,11 @@
 #include <qtcpsocket.h>
 #include <qrect.h>
 
+#if defined(Q_OS_WIN32)
+#include <winsock2.h>
+#else
 #include <arpa/inet.h>
+#endif
 
 void RfbSocket::open( QTcpSocket* tcpSocket )
 {
