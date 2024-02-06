@@ -11,10 +11,14 @@
 
 class QWindow;
 
-#if defined( VNC_MAKEDLL )
-    #define VNC_EXPORT Q_DECL_EXPORT
+#if defined( VNC_MAKESTATIC )
+   #define VNC_EXPORT
 #else
-    #define VNC_EXPORT Q_DECL_IMPORT
+    #if defined( VNC_MAKEDLL )
+        #define VNC_EXPORT Q_DECL_EXPORT
+    #else
+        #define VNC_EXPORT Q_DECL_IMPORT
+    #endif
 #endif
 
 namespace Vnc
