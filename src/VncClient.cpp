@@ -9,6 +9,7 @@
 #include "RfbSocket.h"
 #include "RfbInputEventHandler.h"
 #include "RfbPixelStreamer.h"
+#include "VncNamespace.h"
 
 #include <qtcpsocket.h>
 
@@ -287,11 +288,10 @@ void VncClient::processClientData()
             socket->sendSize32( m_data->window()->size() );
             m_data->pixelStreamer.sendServerFormat( socket );
 
-            const char name[] = "VNC Server for Qt/Quick on EGLFS";
-            const auto length = sizeof( name ) - 1;
+            auto name = Vnc::name().toUtf8();
 
-            socket->sendUint32( length );
-            socket->sendString( name, length );
+            socket->sendUint32( name.length() );
+            socket->sendString( name.data(), name.length() );
 
             m_data->state = Rfb::Connected;
 
