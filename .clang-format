@@ -1,0 +1,22 @@
+---
+Language:        Cpp
+BasedOnStyle:  LLVM
+BreakBeforeBraces: Allman
+IndentWidth:     4
+SpacesInParentheses: true
+SpaceBeforeParens: ControlStatements
+ColumnLimit:     90
+DerivePointerAlignment: false
+PointerAlignment: Left
+BreakConstructorInitializers: BeforeColon
+SpacesInAngles: Always
+AllowShortFunctionsOnASingleLine: Empty
+IndentCaseLabels: true
+PackConstructorInitializers: NextLine
+BreakInheritanceList: BeforeColon
+BreakConstructorInitializers: BeforeColon
+BreakBeforeBinaryOperators: NonAssignment
+SortIncludes: Never
+NamespaceIndentation: All
+...
+

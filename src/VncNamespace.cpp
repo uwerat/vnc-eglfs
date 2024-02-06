@@ -167,7 +167,7 @@ int VncManager::nextPort() const
 {
     auto port = initialPort();
 
-    while( isPortUsed( port ) )
+    while ( isPortUsed( port ) )
         port++;
 
     return port;
