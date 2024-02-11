@@ -49,6 +49,7 @@ namespace
 
         void release() override
         {
+            m_encodedData.resize( 0 );
         }
 
       private:
