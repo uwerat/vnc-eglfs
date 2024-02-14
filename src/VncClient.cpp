@@ -48,10 +48,9 @@ static int encrypt_des( unsigned char* out, int* out_len, const unsigned char ke
 {
     int result = 0;
     EVP_CIPHER_CTX* des = NULL;
-    int i;
 #if ( OPENSSL_VERSION_NUMBER >= 0x30000000L )
-    OSSL_PROVIDER* providerLegacy = NULL;
-    OSSL_PROVIDER* providerDefault = NULL;
+    OSSL_PROVIDER* providerLegacy = nullptr;
+    OSSL_PROVIDER* providerDefault = nullptr;
 #endif
 
 #if ( OPENSSL_VERSION_NUMBER >= 0x30000000L )
@@ -93,7 +92,7 @@ static QByteArray encryptChallenge( const QByteArray& password,
 
     QByteArray key;
     key.fill( 0x00, 8 );
-    const auto min = std::min( password.length(), 8 );
+    const auto min = std::min( static_cast< int >( password.length() ), 8 );
     for ( int i = 0; i < min; ++i )
         key[i] = reverseByte( password[i] );
 
