@@ -50,9 +50,10 @@ namespace
         bool m_autoStart = false;
         int m_timerInterval = 30;
 
-        int m_port = -1;
-        QString m_name{ "VNC Server for Qt/Quick on EGLFS" };
+        QString m_name = QStringLiteral( "VNC Server for Qt/Quick on EGLFS" );
         QByteArray m_password;
+
+        int m_port = -1;
         QVector< VncServer* > m_servers; // usually <= 1
     };
 
@@ -269,10 +270,10 @@ namespace Vnc
     void setInitialPort( int port ) { vncManager->setInitialPort( port ); }
     int initialPort() { return vncManager->initialPort(); }
 
-    void setName( const QString &name ) { vncManager->setName( name ); }
+    void setName( const QString& name ) { vncManager->setName( name ); }
     QString name() { return vncManager->name(); }
 
-    void setPassword( const QByteArray &password ) { vncManager->setPassword( password ); }
+    void setPassword( const QByteArray& password ) { vncManager->setPassword( password ); }
     QByteArray password() { return vncManager->password(); }
 
     void setAutoStartEnabled( bool on ) { vncManager->setAutoStartEnabled( on ); }
