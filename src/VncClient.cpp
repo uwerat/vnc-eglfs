@@ -30,77 +30,89 @@ Q_LOGGING_CATEGORY( logFb, "vnceglfs.fb", QtCriticalMsg )
 
 #include <openssl/evp.h>
 #include <openssl/evperr.h>
+
 #if ( OPENSSL_VERSION_NUMBER >= 0x30000000L )
+    #define VNC_SSL_PROVIDER
+#endif
+
+#ifdef VNC_SSL_PROVIDER
 #include <openssl/provider.h>
 #endif
 
-// 11001010 -> 01010011
-static unsigned char reverseByte( unsigned char b )
+namespace
 {
-    b = ( b & 0xF0 ) >> 4 | ( b & 0x0F ) << 4;
-    b = ( b & 0xCC ) >> 2 | ( b & 0x33 ) << 2;
-    b = ( b & 0xAA ) >> 1 | ( b & 0x55 ) << 1;
-    return b;
-}
-
-static int encrypt_des( unsigned char* out, int* out_len, const unsigned char key[8],
-                        const unsigned char* in, const size_t in_len )
-{
-    int result = 0;
-    EVP_CIPHER_CTX* des = NULL;
-#if ( OPENSSL_VERSION_NUMBER >= 0x30000000L )
-    OSSL_PROVIDER* providerLegacy = nullptr;
-    OSSL_PROVIDER* providerDefault = nullptr;
+    class EncryptionDES
+    {
+      public:
+        EncryptionDES( const QByteArray& password )
+        {
+#ifdef VNC_SSL_PROVIDER
+            m_provider[0] = OSSL_PROVIDER_load( nullptr, "legacy" );
+            m_provider[1] = OSSL_PROVIDER_load( nullptr, "default" );
 #endif
+            m_context = EVP_CIPHER_CTX_new();
 
-#if ( OPENSSL_VERSION_NUMBER >= 0x30000000L )
-    /* Load Multiple providers into the default (NULL) library context */
-    if ( !( providerLegacy = OSSL_PROVIDER_load( NULL, "legacy" ) ) )
-        goto out;
-    if ( !( providerDefault = OSSL_PROVIDER_load( NULL, "default" ) ) )
-        goto out;
+            if ( m_context )
+            {
+                unsigned char key[8];
+                for ( int i = 0; i < 8; ++i )
+                    key[i] = ( i < password.length() ) ? reversedByte( password[i] ) : 0;
+
+                EVP_EncryptInit_ex( m_context, EVP_des_ecb(), nullptr, key, nullptr );
+            }
+        }
+
+        ~EncryptionDES()
+        {
+            if ( m_context )
+                EVP_CIPHER_CTX_free( m_context );
+
+#ifdef VNC_SSL_PROVIDER
+            if ( m_provider[0] )
+                OSSL_PROVIDER_unload( m_provider[0] );
+
+            if ( m_provider[1] )
+                OSSL_PROVIDER_unload( m_provider[1]
 #endif
+        }
 
-    if ( !( des = EVP_CIPHER_CTX_new() ) )
-        goto out;
-    if ( !EVP_EncryptInit_ex( des, EVP_des_ecb(), NULL, key, NULL ) )
-        goto out;
+        QByteArray encrypted( const QByteArray& data ) const
+        {
+            if ( !data.isEmpty() && m_context )
+            {
+                QByteArray result;
+                result.resize( data.size() );
 
-    if ( !EVP_EncryptUpdate( des, out, out_len, in, in_len ) )
-        goto out;
+                auto in = reinterpret_cast< const unsigned char* >( data.constData() );
+                auto out = reinterpret_cast< unsigned char* >( result.data() );
 
-    result = 1;
+                int length = data.size();
 
-out:
-    if ( des )
-        EVP_CIPHER_CTX_free( des );
-#if ( OPENSSL_VERSION_NUMBER >= 0x30000000L )
-    if ( providerLegacy )
-        OSSL_PROVIDER_unload( providerLegacy );
-    if ( providerDefault )
-        OSSL_PROVIDER_unload( providerDefault );
+                if ( EVP_EncryptUpdate( m_context, out, &length, in, length ) )
+                    return result;
+            }
+
+            return QByteArray();
+        }
+
+      private:
+        inline unsigned char reversedByte( unsigned char b )
+        {
+            // 11001010 -> 01010011
+
+            b = ( b & 0xF0 ) >> 4 | ( b & 0x0F ) << 4;
+            b = ( b & 0xCC ) >> 2 | ( b & 0x33 ) << 2;
+            b = ( b & 0xAA ) >> 1 | ( b & 0x55 ) << 1;
+
+            return b;
+        }
+
+        EVP_CIPHER_CTX* m_context = nullptr;
+
+#ifdef VNC_SSL_PROVIDER
+        OSSL_PROVIDER* m_provider[2] = {};
 #endif
-    return result;
-}
-
-static QByteArray encryptChallenge( const QByteArray& password,
-                                    const QByteArray& challenge )
-{
-    QByteArray output;
-    output.resize( challenge.size() );
-    int outlen = output.size();
-
-    QByteArray key;
-    key.fill( 0x00, 8 );
-    const auto min = std::min( static_cast< int >( password.length() ), 8 );
-    for ( int i = 0; i < min; ++i )
-        key[i] = reverseByte( password[i] );
-
-    encrypt_des( reinterpret_cast< unsigned char* >( output.data() ), &outlen,
-                 reinterpret_cast< const unsigned char* >( key.constData() ),
-                 reinterpret_cast< const unsigned char* >( challenge.constData() ),
-                 challenge.size() );
-    return output;
+    };
 }
 
 namespace Rfb
@@ -368,9 +380,11 @@ void VncClient::processClientData()
     {
         if ( socket->bytesAvailable() >= 16 )
         {
-            QByteArray response{ 16, 0 };
-            socket->readString( response.data(), 16 );
-            if ( response != encryptChallenge( Vnc::password(), m_data->challenge ) )
+            QByteArray response( 16, 0 );
+            socket->readString( response.data(), response.size() );
+
+            const EncryptionDES encryption( Vnc::password() );
+            if ( response != encryption.encrypted( m_data->challenge ) )
             {
                 socket->sendUint32( 0x00000001 );
             }

@@ -83,6 +83,10 @@ VncManager::VncManager()
         m_timerInterval = 30;
 
     m_timerInterval = qMax( m_timerInterval, 10 );
+
+    const auto password = qgetenv( "QVNC_GL_PASSWORD" );
+    if ( !password.isEmpty() )
+        setPassword( password );
 }
 
 VncManager::~VncManager()

@@ -59,7 +59,10 @@ SOURCES += \
     RfbInputEventHandler.cpp \
     VncServer.cpp \
     VncClient.cpp \
-    VncNamespace.cpp \
+    VncNamespace.cpp
+
+CONFIG += link_pkgconfig
+PKGCONFIG += openssl
 
 INSTALL_ROOT=/usr/local/vnceglfs
 # INSTALL_ROOT=$$[QT_INSTALL_PREFIX]

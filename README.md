@@ -51,7 +51,7 @@ The number was found by running <em>xtigervncviewer -Log '*:stderr:100'</em> as 
 
 These features are implemented:
 
-- mandatory parts of the RFB protocol
+- mandatory parts of the RFB V3.3 protocol ( including VNC authentication )
 
     This similar to what is supported by the Qt VNC plugin ( + mouse wheel, additional key codes )
 
@@ -62,7 +62,7 @@ These features are implemented:
 
 The following important parts are missing:
 
-- [Authentification]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#security-types )
+- [Authentication ( > V3.3 )]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#security-types )
 
 - [H.264 ]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#open-h-264-encoding )
 
@@ -100,6 +100,11 @@ Both solutions are affected by the following environment variables:
    each server is periodically checking if a new frame is available
    and the viewer is ready to accept it. Increasing the interval might
    decrease the number of updates being displayed in the viewer.
+
+- QVNC_GL_PASSWORD
+
+  A string of max. 8 characters. Setting a non empty password enables
+  VNC authentication.
 
 ### Application code
 
