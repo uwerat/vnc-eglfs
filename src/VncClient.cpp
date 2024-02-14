@@ -9,15 +9,17 @@
 #include "RfbSocket.h"
 #include "RfbInputEventHandler.h"
 #include "RfbPixelStreamer.h"
+#include "VncNamespace.h"
 
 #include <qtcpsocket.h>
 
 #include <qcoreapplication.h>
-#include <qvarlengtharray.h>
 #include <qendian.h>
-#include <qwindow.h>
-#include <qtimer.h>
 #include <qmetaobject.h>
+#include <qrandom.h>
+#include <qtimer.h>
+#include <qvarlengtharray.h>
+#include <qwindow.h>
 
 #include <qloggingcategory.h>
 
@@ -26,6 +28,93 @@ Q_LOGGING_CATEGORY( logFb, "vnceglfs.fb", QtCriticalMsg )
 
 // export QT_LOGGING_RULES="vnceglfs.rfb.debug=true"
 
+#include <openssl/evp.h>
+#include <openssl/evperr.h>
+
+#if ( OPENSSL_VERSION_NUMBER >= 0x30000000L )
+    #define VNC_SSL_PROVIDER
+#endif
+
+#ifdef VNC_SSL_PROVIDER
+#include <openssl/provider.h>
+#endif
+
+namespace
+{
+    class EncryptionDES
+    {
+      public:
+        EncryptionDES( const QByteArray& password )
+        {
+#ifdef VNC_SSL_PROVIDER
+            m_provider[0] = OSSL_PROVIDER_load( nullptr, "legacy" );
+            m_provider[1] = OSSL_PROVIDER_load( nullptr, "default" );
+#endif
+            m_context = EVP_CIPHER_CTX_new();
+
+            if ( m_context )
+            {
+                unsigned char key[8];
+                for ( int i = 0; i < 8; ++i )
+                    key[i] = ( i < password.length() ) ? reversedByte( password[i] ) : 0;
+
+                EVP_EncryptInit_ex( m_context, EVP_des_ecb(), nullptr, key, nullptr );
+            }
+        }
+
+        ~EncryptionDES()
+        {
+            if ( m_context )
+                EVP_CIPHER_CTX_free( m_context );
+
+#ifdef VNC_SSL_PROVIDER
+            if ( m_provider[0] )
+                OSSL_PROVIDER_unload( m_provider[0] );
+
+            if ( m_provider[1] )
+                OSSL_PROVIDER_unload( m_provider[1]
+#endif
+        }
+
+        QByteArray encrypted( const QByteArray& data ) const
+        {
+            if ( !data.isEmpty() && m_context )
+            {
+                QByteArray result;
+                result.resize( data.size() );
+
+                auto in = reinterpret_cast< const unsigned char* >( data.constData() );
+                auto out = reinterpret_cast< unsigned char* >( result.data() );
+
+                int length = data.size();
+
+                if ( EVP_EncryptUpdate( m_context, out, &length, in, length ) )
+                    return result;
+            }
+
+            return QByteArray();
+        }
+
+      private:
+        inline unsigned char reversedByte( unsigned char b )
+        {
+            // 11001010 -> 01010011
+
+            b = ( b & 0xF0 ) >> 4 | ( b & 0x0F ) << 4;
+            b = ( b & 0xCC ) >> 2 | ( b & 0x33 ) << 2;
+            b = ( b & 0xAA ) >> 1 | ( b & 0x55 ) << 1;
+
+            return b;
+        }
+
+        EVP_CIPHER_CTX* m_context = nullptr;
+
+#ifdef VNC_SSL_PROVIDER
+        OSSL_PROVIDER* m_provider[2] = {};
+#endif
+    };
+}
+
 namespace Rfb
 {
     Q_NAMESPACE
@@ -33,6 +122,7 @@ namespace Rfb
     enum ClientState
     {
         Protocol,
+        Challenge,
         Init,
         Connected
     };
@@ -188,6 +278,8 @@ class VncClient::PrivateData
     bool frameDirty = true;
 
     QTimer updateTimer;
+
+    QByteArray challenge;
 };
 
 VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
@@ -264,13 +356,44 @@ void VncClient::processClientData()
                 VNC = 2
             };
 
-            socket->sendUint32( None );
-            m_data->state = Rfb::Init;
+            Authentification auth = Vnc::password().isEmpty() ? None : VNC;
+            socket->sendUint32( auth );
+
+            if ( auth == None )
+                m_data->state = Rfb::Init;
+            else
+            {
+                auto r = QRandomGenerator::system();
+                m_data->challenge.resize( 16 );
+                r->generate( m_data->challenge.begin(), m_data->challenge.end() );
+                socket->sendByteArray( m_data->challenge );
+                m_data->state = Rfb::Challenge;
+            }
 
             qCDebug( logRfb ) << "State" << m_data->state;
         }
 
         return;
+    }
+
+    if ( m_data->state == Rfb::Challenge )
+    {
+        if ( socket->bytesAvailable() >= 16 )
+        {
+            QByteArray response( 16, 0 );
+            socket->readString( response.data(), response.size() );
+
+            const EncryptionDES encryption( Vnc::password() );
+            if ( response != encryption.encrypted( m_data->challenge ) )
+            {
+                socket->sendUint32( 0x00000001 );
+            }
+            else
+            {
+                socket->sendUint32( 0x00000000 );
+                m_data->state = Rfb::Init;
+            }
+        }
     }
 
     if ( m_data->state == Rfb::Init )
@@ -287,11 +410,10 @@ void VncClient::processClientData()
             socket->sendSize32( m_data->window()->size() );
             m_data->pixelStreamer.sendServerFormat( socket );
 
-            const char name[] = "VNC Server for Qt/Quick on EGLFS";
-            const auto length = sizeof( name ) - 1;
+            auto name = Vnc::name().toUtf8();
 
-            socket->sendUint32( length );
-            socket->sendString( name, length );
+            socket->sendUint32( name.length() );
+            socket->sendString( name.data(), name.length() );
 
             m_data->state = Rfb::Connected;
 

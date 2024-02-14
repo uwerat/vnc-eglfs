@@ -61,27 +61,12 @@ SOURCES += \
     RfbInputEventHandler.cpp \
     VncServer.cpp \
     VncClient.cpp \
-    VncNamespace.cpp \
+    VncNamespace.cpp
 
-videoacceleration {
+CONFIG += link_pkgconfig
+PKGCONFIG += openssl
 
-    HEADERS += \
-        va/VncJpeg.h \
-        va/VncVaRenderer.h \
-        va/VncVaEncoder.h
-
-    SOURCES += \
-        va/VncJpeg.cpp \
-        va/VncVaRenderer.cpp \
-        va/VncVaEncoder.cpp
-
-    DEFINES += VNC_VA_ENCODER
-
-    CONFIG += link_pkgconfig
-    PKGCONFIG += libva-drm libva
-}
-
-INSTALL_ROOT=/usr/local/qpagbm
+INSTALL_ROOT=/usr/local/vnceglfs
 # INSTALL_ROOT=$$[QT_INSTALL_PREFIX]
 
 target.path = $${INSTALL_ROOT}/lib

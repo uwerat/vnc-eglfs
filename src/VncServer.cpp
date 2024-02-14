@@ -136,7 +136,8 @@ VncServer::~VncServer()
 {
     m_window = nullptr;
 
-    for ( auto thread : qAsConst( m_threads ) )
+    const auto& threads = m_threads; // qAsConst is deprecated in Qt6.7, std::as_const is C++17
+    for ( auto thread : threads )
     {
         thread->quit();
         thread->wait( 20 );
@@ -156,12 +157,12 @@ void VncServer::addClient( qintptr fd )
     if ( m_window && !m_grabConnectionId )
     {
         /*
-            frameSwapped is from the scene graph thread, so we
+            afterRendering is from the scene graph thread, so we
             need a Qt::DirectConnection to avoid, that the image is
             already gone, when being scheduled from a Qt::QQueuedConnection !
          */
 
-        m_grabConnectionId = QObject::connect( m_window, SIGNAL(frameSwapped()),
+        m_grabConnectionId = QObject::connect( m_window, SIGNAL(afterRendering()),
             this, SLOT(updateFrameBuffer()), Qt::DirectConnection );
 
         QMetaObject::invokeMethod( m_window, "update" );
@@ -194,11 +195,21 @@ void VncServer::removeClient()
 
 void VncServer::setTimerInterval( int ms )
 {
-    for ( auto thread : qAsConst( m_threads ) )
+    const auto& threads = m_threads;
+    for ( auto thread : threads )
     {
         auto client = static_cast< ClientThread* >( thread )->client();
         client->setTimerInterval( ms );
     }
+}
+
+static inline bool isOpenGL12orBetter( const QOpenGLContext* context )
+{
+    if ( context->isOpenGLES() )
+        return false;
+
+    const auto fmt = context->format();
+    return ( fmt.majorVersion() >= 2 ) || ( fmt.minorVersion() >= 2 );
 }
 
 static void grabWindow( QImage& frameBuffer )
@@ -209,21 +220,49 @@ static void grabWindow( QImage& frameBuffer )
         timer.start();
 
 #if 0
-    #ifndef GL_BGRA
-        #define GL_BGRA 0x80E1
-    #endif
+    const auto context = QOpenGLContext::currentContext();
 
-    #ifndef GL_UNSIGNED_INT_8_8_8_8_REV
-        #define GL_UNSIGNED_INT_8_8_8_8_REV 0x8367
-    #endif
+    if ( isOpenGL12orBetter( context ) )
+    {
+        #ifndef GL_BGRA
+            #define GL_BGRA 0x80E1
+        #endif
 
-    QOpenGLContext::currentContext()->functions()->glReadPixels(
-        0, 0, frameBuffer.width(), frameBuffer.height(),
-        GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, frameBuffer.bits() );
+        #ifndef GL_UNSIGNED_INT_8_8_8_8_REV
+            #define GL_UNSIGNED_INT_8_8_8_8_REV 0x8367
+        #endif
 
-    // OpenGL images are vertically flipped.
-    frameBuffer = std::move( frameBuffer ).mirrored( false, true );
+        context->functions()->glReadPixels(
+            0, 0, frameBuffer.width(), frameBuffer.height(),
+            GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, frameBuffer.bits() );
 
+        // OpenGL images are vertically flipped.
+        frameBuffer = std::move( frameBuffer ).mirrored( false, true );
+    }
+    else
+    {
+        QImage image( frameBuffer.size(), QImage::Format_RGBX8888 );
+#if 0
+        image.fill( Qt::white ); // for debugging only
+#endif
+
+        context->functions()->glReadPixels(
+            0, 0, frameBuffer.width(), frameBuffer.height(),
+            GL_RGBA, GL_UNSIGNED_BYTE, image.bits() );
+
+        // inplace conversion/mirroring in one pass: TODO ...
+        if ( image.format() != frameBuffer.format() )
+        {
+#if QT_VERSION < QT_VERSION_CHECK( 5, 13, 0 )
+            image = image.convertToFormat( frameBuffer.format() );
+#else
+            image.convertTo( frameBuffer.format() );
+#endif
+        }
+
+        // OpenGL images are vertically flipped.
+        frameBuffer = image.mirrored( false, true );
+    }
 #else
     // avoiding native OpenGL calls
 
@@ -232,7 +271,16 @@ static void grabWindow( QImage& frameBuffer )
 
     const auto format = frameBuffer.format();
     frameBuffer = qt_gl_read_framebuffer( frameBuffer.size(), false, false );
-    frameBuffer.convertTo( format );
+
+    if ( frameBuffer.format() != format )
+    {
+#if QT_VERSION < QT_VERSION_CHECK( 5, 13, 0 )
+        frameBuffer = frameBuffer.convertToFormat( format );
+#else
+        frameBuffer.convertTo( format );
+#endif
+    }
+
 #endif
 
     if ( logGrab().isDebugEnabled() )
@@ -266,7 +314,8 @@ void VncServer::updateFrameBuffer()
 
     const QRect rect( 0, 0, m_frameBuffer.width(), m_frameBuffer.height() );
 
-    for ( auto thread : qAsConst( m_threads ) )
+    const auto& threads = m_threads;
+    for ( auto thread : threads )
     {
         auto clientThread = static_cast< ClientThread* >( thread );
         clientThread->markDirty();
