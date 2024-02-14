@@ -128,7 +128,7 @@ Assuming library and plugin are installed in "/usr/local/vnceglfs":
 
 ```
 # export QT_DEBUG_PLUGINS=1
-export QT_QPA_PLATFORM_PLUGIN_PATH="/usr/local/vnceglfs/plugins"
+export QT_QPA_PLATFORM_PLUGIN_PATH="/usr/local/vnceglfs/plugins/platforms"
 export LD_LIBRARY_PATH="/usr/local/vnceglfs/lib"
 
 export QT_QPA_PLATFORM=vnceglfs # vncxcb, vncwayland, vncoffscreen, vncgbm
