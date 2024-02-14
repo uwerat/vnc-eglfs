@@ -289,7 +289,7 @@ void RfbPixelStreamer::sendImageJPEG(
 
         encoder.encode( image, rect );
 
-        const quint32 length = encoder.encodedData().count();
+        const quint32 length = encoder.encodedData().size();
 
         // length in compact representation
         if ( length >= 16384 )

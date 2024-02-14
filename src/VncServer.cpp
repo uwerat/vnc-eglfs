@@ -136,7 +136,8 @@ VncServer::~VncServer()
 {
     m_window = nullptr;
 
-    for ( auto thread : qAsConst( m_threads ) )
+    const auto& threads = m_threads; // qAsConst is deprecated in Qt6.7, std::as_const is C++17
+    for ( auto thread : threads )
     {
         thread->quit();
         thread->wait( 20 );
@@ -194,7 +195,8 @@ void VncServer::removeClient()
 
 void VncServer::setTimerInterval( int ms )
 {
-    for ( auto thread : qAsConst( m_threads ) )
+    const auto& threads = m_threads;
+    for ( auto thread : threads )
     {
         auto client = static_cast< ClientThread* >( thread )->client();
         client->setTimerInterval( ms );
@@ -312,7 +314,8 @@ void VncServer::updateFrameBuffer()
 
     const QRect rect( 0, 0, m_frameBuffer.width(), m_frameBuffer.height() );
 
-    for ( auto thread : qAsConst( m_threads ) )
+    const auto& threads = m_threads;
+    for ( auto thread : threads )
     {
         auto clientThread = static_cast< ClientThread* >( thread );
         clientThread->markDirty();
