@@ -72,7 +72,7 @@ namespace
                 OSSL_PROVIDER_unload( m_provider[0] );
 
             if ( m_provider[1] )
-                OSSL_PROVIDER_unload( m_provider[1]
+                OSSL_PROVIDER_unload( m_provider[1] );
 #endif
         }
 
