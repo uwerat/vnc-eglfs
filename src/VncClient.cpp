@@ -29,7 +29,9 @@ Q_LOGGING_CATEGORY( logFb, "vnceglfs.fb", QtCriticalMsg )
 // export QT_LOGGING_RULES="vnceglfs.rfb.debug=true"
 
 #include <openssl/evp.h>
-#include <openssl/evperr.h>
+#if ( OPENSSL_VERSION_NUMBER >= 0x1010100aL )
+    #include <openssl/evperr.h>
+#endif
 
 #if ( OPENSSL_VERSION_NUMBER >= 0x30000000L )
     #define VNC_SSL_PROVIDER
