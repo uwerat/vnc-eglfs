@@ -17,7 +17,7 @@ namespace
         {
             QPlatformIntegration* integration = nullptr;
 
-            if ( system.startsWith( "vnc", Qt::CaseInsensitive ) )
+            if ( system.startsWith( QStringLiteral("vnc"), Qt::CaseInsensitive ) )
             {
                 const auto path = QString::fromLocal8Bit(
                     qgetenv( "QT_QPA_PLATFORM_PLUGIN_PATH" ) );

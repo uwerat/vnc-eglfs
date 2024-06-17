@@ -196,7 +196,7 @@ static QString keyText( quint32 qtkey, bool isLower, Qt::KeyboardModifiers modif
         if ( isLower )
             qtkey -= 'A' - 'a';
 
-        return QString( static_cast< char >( qtkey ) );
+        return QString( QLatin1Char( static_cast< char >( qtkey ) ) );
     }
 
     return QString();
