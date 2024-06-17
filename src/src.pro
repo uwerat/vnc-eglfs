@@ -17,7 +17,7 @@ CONFIG += pedantic
 CONFIG += debug
 
 pedantic {
-    linux-g++ | linux-g++-64 {
+    linux-*g++ | linux-g++-64 {
 
         QMAKE_CXXFLAGS *= -pedantic-errors
         QMAKE_CXXFLAGS *= -Wpedantic

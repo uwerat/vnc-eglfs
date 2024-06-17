@@ -11,6 +11,7 @@ namespace
         Q_PLUGIN_METADATA( IID QPlatformIntegrationFactoryInterface_iid FILE "metadata.json" )
 
       public:
+        using QPlatformIntegrationPlugin::create;
 
         QPlatformIntegration* create( const QString& system,
             const QStringList& args, int& argc, char** argv ) override
