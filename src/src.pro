@@ -12,13 +12,13 @@ CONFIG += no_private_qt_headers_warning
 CONFIG += strict_c++
 CONFIG += c++11
 CONFIG += warn_on
-CONFIG += pedantic
 
-CONFIG += debug
+#CONFIG += pedantic
+#CONFIG += debug
+
 
 pedantic {
-    linux-g++ | linux-g++-64 {
-
+    gcc {
         QMAKE_CXXFLAGS *= -pedantic-errors
         QMAKE_CXXFLAGS *= -Wpedantic
 
