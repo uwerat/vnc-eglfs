@@ -340,6 +340,6 @@ void RfbPixelStreamer::sendCursor(
 
         const int width = ( bitmap.width() + 7 ) / 8;
         for ( int i = 0; i < bitmap.height(); ++i )
-            socket->sendScanLine8( (const char*)bitmap.scanLine(i), width );
+            socket->sendScanLine8( reinterpret_cast<const char*>( bitmap.scanLine(i) ), width );
     }
 }

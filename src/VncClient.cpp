@@ -231,7 +231,7 @@ static inline QDebug operator<<( QDebug debug, const QVector< qint32 >& encoding
             }
             else
             {
-                const auto hex = QString("0x") + QString::number( encoding, 16 );
+                const auto hex = QStringLiteral("0x%1").arg( QString::number( encoding, 16 ) );
                 debug << encoding << " ( " << hex << " )";
             }
         }
@@ -476,7 +476,7 @@ void VncClient::processClientData()
                     break;
 
                 default:
-                    qWarning("Unknown message type: %d", (int)m_data->messageType);
+                    qWarning("Unknown message type: %d", m_data->messageType);
                     done = true;
             }
 
@@ -566,7 +566,7 @@ bool VncClient::handleSetEncodings()
         m_data->jpegLevel = -1;
     }
 
-    const auto bytesAvailable = (unsigned) socket->bytesAvailable();
+    const auto bytesAvailable = static_cast<unsigned>( socket->bytesAvailable() );
     if ( bytesAvailable < count * sizeof( quint32 ) )
         return false;
 
