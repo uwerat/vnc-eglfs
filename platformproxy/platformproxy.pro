@@ -24,7 +24,7 @@ BUILD_ROOT = $$clean_path( $$OUT_PWD/../src )
 INCLUDEPATH *= $${PROJECT_ROOT}
 DEPENDPATH *= $${PROJECT_ROOT}
 
-LIBS *= -L$${BUILD_ROOT}/lib -lvncgl
+LIBS *= -L$${BUILD_ROOT}/lib -l$$qtLibraryTarget(vncgl)
 
 SOURCES += \
     VncProxyPlugin.cpp
