@@ -6,8 +6,7 @@
 #include "RfbSocket.h"
 #include <qtcpsocket.h>
 #include <qrect.h>
-
-#include <arpa/inet.h>
+#include <qendian.h>
 
 void RfbSocket::open( QTcpSocket* tcpSocket )
 {
@@ -51,13 +50,13 @@ void RfbSocket::sendEncoding32( qint32 value )
 
 void RfbSocket::sendUint32( quint32 value )
 {
-    value = htonl( value );
+    qToBigEndian( value, &value ); // htonl
     sendBytes( &value, sizeof( quint32 ) );
 }
 
 void RfbSocket::sendUint16( quint16 value )
 {
-    value = htons( value );
+    qToBigEndian( value, &value ); // htons
     sendBytes( &value, sizeof( quint16 ) );
 }
 
@@ -71,7 +70,7 @@ quint32 RfbSocket::receiveUint32()
     quint32 value;
     readBytes( &value, sizeof( quint32 ) );
 
-    return ntohl(value);
+    return qFromBigEndian( value ); // ntohl
 }
 
 quint16 RfbSocket::receiveUint16()
@@ -79,7 +78,7 @@ quint16 RfbSocket::receiveUint16()
     quint16 value;
     readBytes( &value, sizeof( quint16 ) );
 
-    return ntohs( value );
+    return qFromBigEndian( value ); // ntohs
 }
 
 quint8 RfbSocket::receiveUint8()
