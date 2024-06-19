@@ -296,8 +296,7 @@ VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
 
     m_data->socket.open( socket );
 
-    // checking every 30ms for updates
-    m_data->updateTimer.setInterval( 30 );
+    m_data->updateTimer.setInterval( Vnc::timerInterval() );
     connect( &m_data->updateTimer, &QTimer::timeout, this, &VncClient::maybeSendFrameBuffer );
 
     // send protocol version
