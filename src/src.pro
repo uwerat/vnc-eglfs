@@ -16,7 +16,6 @@ CONFIG += warn_on
 #CONFIG += pedantic
 #CONFIG += debug
 
-
 pedantic {
     gcc {
         QMAKE_CXXFLAGS *= -pedantic-errors
@@ -26,14 +25,26 @@ pedantic {
         QMAKE_CXXFLAGS *= -Wsuggest-final-types
         QMAKE_CXXFLAGS *= -Wsuggest-final-methods
 
+        CONFIG += noqtheaderwarnings
         #QMAKE_CXXFLAGS *= -fanalyzer
+    }
+}
 
-           QMAKE_CXXFLAGS += \
-                -isystem $$[QT_INSTALL_HEADERS]/QtCore \
-                -isystem $$[QT_INSTALL_HEADERS]/QtCore/$$[QT_VERSION]/QtCore \
-                -isystem $$[QT_INSTALL_HEADERS]/QtGui \
-                -isystem $$[QT_INSTALL_HEADERS]/QtGui/$$[QT_VERSION]/QtGui \
-                -isystem $$[QT_INSTALL_HEADERS]/QtNetwork \
+lessThan(QT_MAJOR_VERSION, 6) {
+
+    # Qt5 headers might be full of warnings, when using modern compilers
+    CONFIG += noqtheaderwarnings
+}
+
+noqtheaderwarnings {
+
+    linux {
+        QMAKE_CXXFLAGS += \
+            -isystem $$[QT_INSTALL_HEADERS]/QtCore \
+            -isystem $$[QT_INSTALL_HEADERS]/QtCore/$$[QT_VERSION]/QtCore \
+            -isystem $$[QT_INSTALL_HEADERS]/QtGui \
+            -isystem $$[QT_INSTALL_HEADERS]/QtGui/$$[QT_VERSION]/QtGui \
+            -isystem $$[QT_INSTALL_HEADERS]/QtNetwork \
     }
 }
 

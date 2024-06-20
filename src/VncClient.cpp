@@ -364,9 +364,11 @@ void VncClient::processClientData()
                 m_data->state = Rfb::Init;
             else
             {
-                auto r = QRandomGenerator::system();
                 m_data->challenge.resize( 16 );
+
+                auto r = QRandomGenerator::system();
                 r->generate( m_data->challenge.begin(), m_data->challenge.end() );
+
                 socket->sendByteArray( m_data->challenge );
                 m_data->state = Rfb::Challenge;
             }

@@ -126,6 +126,8 @@ void Rfb::handlePointerEvent( const QPointF& pos, quint8 buttonMask, QWindow* wi
         if ( buttonMask & ButtonRight )
             buttons |= Qt::RightButton;
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 11, 0)
+
         // what to do, when having inputs from different clients ???
         auto oldButtons = QGuiApplication::mouseButtons();
         oldButtons &= ( Qt::LeftButton | Qt::MiddleButton | Qt::RightButton );
@@ -150,6 +152,10 @@ void Rfb::handlePointerEvent( const QPointF& pos, quint8 buttonMask, QWindow* wi
 
         QWindowSystemInterface::handleMouseEvent(
             window, pos, pos, buttons, button, eventType, keyboardModifiers );
+#else
+        QWindowSystemInterface::handleMouseEvent(
+            window, pos, pos, buttons, keyboardModifiers );
+#endif
     }
 }
 
