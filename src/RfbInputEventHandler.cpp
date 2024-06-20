@@ -258,18 +258,28 @@ void Rfb::handleKeyEvent( quint32 keysym, bool down, QWindow* window )
     {
         auto modifiers = QGuiApplication::keyboardModifiers();
         const auto text = keyText( qtkey, isLower, modifiers );
+        auto setFlag = [&](Qt::KeyboardModifier modifier, bool down) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 7, 0)
+            modifiers.setFlag( modifier, down );
+#else
+            if (down)
+                modifiers |= modifier;
+            else
+                modifiers &= ~QFlags<Qt::KeyboardModifier>::Int( modifier );
+#endif
+        };
 
         if ( qtkey == Qt::Key_Shift )
         {
-            modifiers.setFlag( Qt::ShiftModifier, down );
+            setFlag( Qt::ShiftModifier, down );
         }
         else if ( qtkey == Qt::Key_Control )
         {
-            modifiers.setFlag( Qt::ControlModifier, down );
+            setFlag( Qt::ControlModifier, down );
         }
         else if ( qtkey == Qt::Key_Alt )
         {
-            modifiers.setFlag( Qt::AltModifier, down );
+            setFlag( Qt::AltModifier, down );
         }
 
         const auto eventType = down ? QEvent::KeyPress : QEvent::KeyRelease;

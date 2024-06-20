@@ -16,7 +16,9 @@
 #include <qcoreapplication.h>
 #include <qendian.h>
 #include <qmetaobject.h>
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
 #include <qrandom.h>
+#endif
 #include <qtimer.h>
 #include <qvarlengtharray.h>
 #include <qwindow.h>
@@ -117,10 +119,11 @@ namespace
     };
 }
 
-namespace Rfb
+class RfbData : public QObject
 {
-    Q_NAMESPACE
+    Q_OBJECT
 
+public:
     enum ClientState
     {
         Protocol,
@@ -128,7 +131,7 @@ namespace Rfb
         Init,
         Connected
     };
-    Q_ENUM_NS( ClientState )
+    Q_ENUM( ClientState )
 
     enum Encoding : qint64
     {
@@ -183,12 +186,12 @@ namespace Rfb
         H264          = 20,
         JRLE          = 22,
     };
-    Q_ENUM_NS( Encoding )
-}
+    Q_ENUM( Encoding )
+};
 
 static inline QDebug operator<<( QDebug debug, const QVector< qint32 >& encodings )
 {
-    const auto mo = &Rfb::staticMetaObject;
+    const auto mo = &RfbData::staticMetaObject;
     const auto enumerator = mo->enumerator( mo->indexOfEnumerator( "Encoding" ) );
 
     debug.nospace();
@@ -303,7 +306,7 @@ VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
     const char proto[] = "RFB 003.003\n";
     m_data->socket.sendString( proto, 12 );
 
-    m_data->state = Rfb::Protocol;
+    m_data->state = RfbData::Protocol;
     qCDebug( logRfb ) << "State" << m_data->state;
 }
 
@@ -338,7 +341,7 @@ void VncClient::processClientData()
 
     auto socket = &m_data->socket;
 
-    if ( m_data->state == Rfb::Protocol )
+    if ( m_data->state == RfbData::Protocol )
     {
         if ( socket->bytesAvailable() >= 12 )
         {
@@ -361,16 +364,21 @@ void VncClient::processClientData()
             socket->sendUint32( auth );
 
             if ( auth == None )
-                m_data->state = Rfb::Init;
+                m_data->state = RfbData::Init;
             else
             {
                 m_data->challenge.resize( 16 );
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
                 auto r = QRandomGenerator::system();
                 r->generate( m_data->challenge.begin(), m_data->challenge.end() );
+#else
+                for ( int i = 0; i < m_data->challenge.size(); ++i )
+                    m_data->challenge[i] = qrand();
+#endif
 
                 socket->sendByteArray( m_data->challenge );
-                m_data->state = Rfb::Challenge;
+                m_data->state = RfbData::Challenge;
             }
 
             qCDebug( logRfb ) << "State" << m_data->state;
@@ -379,7 +387,7 @@ void VncClient::processClientData()
         return;
     }
 
-    if ( m_data->state == Rfb::Challenge )
+    if ( m_data->state == RfbData::Challenge )
     {
         if ( socket->bytesAvailable() >= 16 )
         {
@@ -394,12 +402,12 @@ void VncClient::processClientData()
             else
             {
                 socket->sendUint32( 0x00000000 );
-                m_data->state = Rfb::Init;
+                m_data->state = RfbData::Init;
             }
         }
     }
 
-    if ( m_data->state == Rfb::Init )
+    if ( m_data->state == RfbData::Init )
     {
         if ( socket->bytesAvailable() >= 1 )
         {
@@ -418,7 +426,7 @@ void VncClient::processClientData()
             socket->sendUint32( name.length() );
             socket->sendString( name.data(), name.length() );
 
-            m_data->state = Rfb::Connected;
+            m_data->state = RfbData::Connected;
 
             qCDebug( logRfb ) << "State" << m_data->state;
         }
@@ -426,7 +434,7 @@ void VncClient::processClientData()
         return;
     }
 
-    if ( m_data->state == Rfb::Connected )
+    if ( m_data->state == RfbData::Connected )
     {
         enum
         {
@@ -576,16 +584,16 @@ bool VncClient::handleSetEncodings()
         const qint32 encoding = socket->receiveUint32();
         m_data->encodings += encoding;
 
-        if ( encoding == Rfb::Tight )
+        if ( encoding == RfbData::Tight )
         {
             m_data->tightEnabled = true;
         }
-        else if ( encoding == Rfb::Cursor )
+        else if ( encoding == RfbData::Cursor )
         {
             m_data->cursorEnabled = true;
             updateCursor();
         }
-        else if ( encoding == Rfb::DesktopSize )
+        else if ( encoding == RfbData::DesktopSize )
         {
             m_data->screenResizable = true;
         }
