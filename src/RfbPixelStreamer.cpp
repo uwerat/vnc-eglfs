@@ -136,9 +136,9 @@ namespace
                     ( b << m_blueShift );
 
                 if ( m_bigEndian )
-                    qToBigEndian( pixel, out + i );
+                    out[i] = qToBigEndian( pixel );
                 else
-                    qToLittleEndian( pixel, out + i );
+                    out[i] = qToLittleEndian( pixel );
             }
         }
 

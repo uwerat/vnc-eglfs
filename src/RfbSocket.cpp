@@ -50,13 +50,13 @@ void RfbSocket::sendEncoding32( qint32 value )
 
 void RfbSocket::sendUint32( quint32 value )
 {
-    qToBigEndian( value, &value ); // htonl
+    value = qToBigEndian( value ); // htonl
     sendBytes( &value, sizeof( quint32 ) );
 }
 
 void RfbSocket::sendUint16( quint16 value )
 {
-    qToBigEndian( value, &value ); // htons
+    value = qToBigEndian( value ); // htons
     sendBytes( &value, sizeof( quint16 ) );
 }
 
