@@ -50,7 +50,7 @@ HEADERS += \
     RfbInputEventHandler.h \
     VncServer.h \
     VncClient.h \
-    VncNamespace.h \
+    VncNamespace.h
 
 SOURCES += \
     RfbSocket.cpp \
