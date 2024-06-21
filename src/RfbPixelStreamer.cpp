@@ -245,7 +245,7 @@ void RfbPixelStreamer::sendImageRaw(
 #if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
     for ( const QRect& rect : region )
 #else
-    foreach ( const QRect& rect, region.rects() )
+    for ( const QRect& rect : region.rects() )
 #endif
     {
         socket->sendRect64( rect );
@@ -275,7 +275,7 @@ void RfbPixelStreamer::sendImageJPEG(
 #if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
     for ( const QRect& rect : region )
 #else
-    foreach ( const QRect& rect, region.rects() )
+    for ( const QRect& rect : region.rects() )
 #endif
     {
         // Tight encoding limits the width of a rectangle
@@ -291,7 +291,7 @@ void RfbPixelStreamer::sendImageJPEG(
 #if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
     for ( const QRect& rect : tightRegion )
 #else
-    foreach ( const QRect& rect, tightRegion.rects() )
+    for ( const QRect& rect : tightRegion.rects() )
 #endif
     {
         socket->sendRect64( rect );
