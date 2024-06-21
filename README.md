@@ -39,9 +39,11 @@ Obvious limitations:
     For other platforms - like xcb or wayland - good solutions for mirroring a desktop are
     available.
 
+The code might work with all Qt versions >= 5.6.
+
 # Project Status
 
-The current status of the implementation was tested for Qt >= 5.12 with
+The current status of the implementation was tested with
 remote connections to an application running on EGLFS and XCB.
 
 Numbers depend on the capabilities of the devices and the size/content of the window,
