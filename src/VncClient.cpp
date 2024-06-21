@@ -119,11 +119,10 @@ namespace
     };
 }
 
-class RfbData : public QObject
+struct RfbData
 {
-    Q_OBJECT
+    // using a struct: moc does not support namespaces for Qt < 5.8.
 
-public:
     enum ClientState
     {
         Protocol,
@@ -187,6 +186,8 @@ public:
         JRLE          = 22,
     };
     Q_ENUM( Encoding )
+
+    Q_GADGET
 };
 
 static inline QDebug operator<<( QDebug debug, const QVector< qint32 >& encodings )
