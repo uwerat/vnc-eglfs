@@ -1,3 +1,8 @@
+/******************************************************************************
+ * VncEGLFS - Copyright (C) 2022 Uwe Rathmann
+ *            SPDX-License-Identifier: BSD-3-Clause
+ *****************************************************************************/
+
 #include <qpa/qplatformintegrationplugin.h>
 #include <qpa/qplatformintegrationfactory_p.h>
 

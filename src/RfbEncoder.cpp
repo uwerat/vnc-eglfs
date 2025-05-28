@@ -1,6 +1,6 @@
 /******************************************************************************
  * VncEGLFS - Copyright (C) 2022 Uwe Rathmann
- * This file may be used under the terms of the 3-clause BSD License
+ *            SPDX-License-Identifier: BSD-3-Clause
  *****************************************************************************/
 
 #include "RfbEncoder.h"

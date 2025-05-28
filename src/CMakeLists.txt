@@ -1,6 +1,6 @@
 ############################################################################
 # VncEGLFS - Copyright (C) 2022 Uwe Rathmann
-#           SPDX-License-Identifier: BSD-3-Clause
+#            SPDX-License-Identifier: BSD-3-Clause
 ############################################################################
 
 cmake_minimum_required(VERSION 3.16)
