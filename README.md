@@ -78,6 +78,20 @@ The following important parts are missing:
     If you are familiar with [libva]( http://intel.github.io/libva/group__api__core.html)
     and want to help: let me know.
 
+# Installation
+
+You can build and install the libraries/headers and the
+platformproxy plugin ( see below ) using cmake. 
+
+A typical command line sequence might be:
+```
+mkdir build
+cd build
+cmake <vnceglfs-dir> [-DCMAKE_PREFIX_PATH=<qt-dir>] [-DBUILD_PLATFORM_PROXY=ON]
+cmake --build .
+cmake --install . [--prefix <install-dir>]
+```
+
 # How to use
 
 There are 2 way how to enable VNC support for an applation:
