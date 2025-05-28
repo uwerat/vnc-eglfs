@@ -51,7 +51,7 @@ noqtheaderwarnings {
 MOC_DIR=moc
 OBJECTS_DIR=obj
 
-TARGET = $$qtLibraryTarget(vncgl)
+TARGET = $$qtLibraryTarget(qvnceglfs)
 DESTDIR = lib
 
 HEADERS += \

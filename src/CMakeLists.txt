@@ -27,12 +27,6 @@ list(APPEND SOURCES
 
 set(target qvnceglfs)
 
-if (NOT DEFINED CMAKE_CXX_VISIBLITY_PRESET AND
-    NOT DEFINED CMAKE_VISIBILITY_INLINES_HIDDEN)
-  set(CMAKE_CXX_VISIBLITY_PRESET hidden)
-  set(CMAKE_VISIBILITY_INLINES_HIDDEN YES)
-endif ()
-
 add_library(${target} SHARED ${SOURCES} ${HEADERS})
 
 set_target_properties(${target} PROPERTIES
@@ -46,6 +40,8 @@ target_link_libraries(${target} PUBLIC
 
 target_compile_definitions(${target} PRIVATE
     VNC_MAKEDLL)
+
+# configure_package_config_file TODO ...
 
 install(TARGETS ${target}
         PUBLIC_HEADER
