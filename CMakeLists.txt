@@ -10,8 +10,16 @@ macro(find_packages)
     # relying on cmake heuristics to select a specific Qt version is no good idea.
     # using -DCMAKE_PREFIX_PATH="..." is highly recommended
 
+    set( QT_NO_PRIVATE_MODULE_WARNING ON )
+
     find_package(QT "5.6" NAMES Qt6 Qt5)
     find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Gui Network )
+
+    if(QT_VERSION_MAJOR VERSION_GREATER_EQUAL 6)
+        if(QT_VERSION_MINOR VERSION_GREATER_EQUAL 9)
+            find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
+        endif()
+    endif()
 
     if ( QT_FOUND )
             
