@@ -124,12 +124,12 @@ Both solutions are affected by the following environment variables:
 
 ### Application code
 
-The most simple way to enable VNC support is to add the following line somewhere:
+The most simple way to enable VNC support is to add the following lines somewhere:
 
 ```
 #include <VncNamespace.h>
 
-VNC::setup();
+Vnc::setAutoStartEnabled( true );
 ```
 
 If you want to get rid of the local windows you have several options:
