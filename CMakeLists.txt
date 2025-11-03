@@ -54,7 +54,6 @@ macro(setup)
 
     set(CMAKE_CXX_VISIBILITY_PRESET hidden)
     set(CMAKE_VISIBILITY_INLINES_HIDDEN YES)
-    set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
 
     #################
     # compiler flags
