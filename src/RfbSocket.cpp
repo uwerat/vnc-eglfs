@@ -40,6 +40,7 @@ qint64 RfbSocket::readBytes( void* data, qint64 count )
     if ( m_tcpSocket )
         return m_tcpSocket->read( reinterpret_cast< char* >( data ), count );
 
+    memset( data, 0, count );
     return -1;
 }
 
