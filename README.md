@@ -39,9 +39,11 @@ Obvious limitations:
     For other platforms - like xcb or wayland - good solutions for mirroring a desktop are
     available.
 
+The code might work with all Qt versions >= 5.6.
+
 # Project Status
 
-The current status of the implementation was tested for Qt >= 5.12 with
+The current status of the implementation was tested with
 remote connections to an application running on EGLFS and XCB.
 
 Numbers depend on the capabilities of the devices and the size/content of the window,
@@ -76,6 +78,20 @@ The following important parts are missing:
     If you are familiar with [libva]( http://intel.github.io/libva/group__api__core.html)
     and want to help: let me know.
 
+# Installation
+
+You can build and install the libraries/headers and the
+platformproxy plugin ( see below ) using cmake. 
+
+A typical command line sequence might be:
+```
+mkdir build
+cd build
+cmake <vnceglfs-dir> [-DCMAKE_PREFIX_PATH=<qt-dir>] [-DBUILD_PLATFORM_PROXY=ON]
+cmake --build .
+cmake --install . [--prefix <install-dir>]
+```
+
 # How to use
 
 There are 2 way how to enable VNC support for an applation:
@@ -108,12 +124,12 @@ Both solutions are affected by the following environment variables:
 
 ### Application code
 
-The most simple way to enable VNC support is to add the following line somewhere:
+The most simple way to enable VNC support is to add the following lines somewhere:
 
 ```
 #include <VncNamespace.h>
 
-VNC::setup();
+Vnc::setAutoStartEnabled( true );
 ```
 
 If you want to get rid of the local windows you have several options:

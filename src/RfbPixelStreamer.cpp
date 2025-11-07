@@ -1,6 +1,6 @@
 /******************************************************************************
  * VncEGLFS - Copyright (C) 2022 Uwe Rathmann
- * This file may be used under the terms of the 3-clause BSD License
+ *            SPDX-License-Identifier: BSD-3-Clause
  *****************************************************************************/
 
 #include "RfbPixelStreamer.h"
@@ -136,9 +136,9 @@ namespace
                     ( b << m_blueShift );
 
                 if ( m_bigEndian )
-                    qToBigEndian( pixel, out + i );
+                    out[i] = qToBigEndian( pixel );
                 else
-                    qToLittleEndian( pixel, out + i );
+                    out[i] = qToLittleEndian( pixel );
             }
         }
 
@@ -242,7 +242,11 @@ void RfbPixelStreamer::sendImageRaw(
 
     socket->sendUint16( region.rectCount() );
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
     for ( const QRect& rect : region )
+#else
+    for ( const QRect& rect : region.rects() )
+#endif
     {
         socket->sendRect64( rect );
 
@@ -268,7 +272,11 @@ void RfbPixelStreamer::sendImageJPEG(
 
     QRegion tightRegion;
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
     for ( const QRect& rect : region )
+#else
+    for ( const QRect& rect : region.rects() )
+#endif
     {
         // Tight encoding limits the width of a rectangle
         const int maxWidth = 2048;
@@ -280,7 +288,11 @@ void RfbPixelStreamer::sendImageJPEG(
         }
     }
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
     for ( const QRect& rect : tightRegion )
+#else
+    for ( const QRect& rect : tightRegion.rects() )
+#endif
     {
         socket->sendRect64( rect );
 
@@ -340,6 +352,6 @@ void RfbPixelStreamer::sendCursor(
 
         const int width = ( bitmap.width() + 7 ) / 8;
         for ( int i = 0; i < bitmap.height(); ++i )
-            socket->sendScanLine8( (const char*)bitmap.scanLine(i), width );
+            socket->sendScanLine8( reinterpret_cast<const char*>( bitmap.scanLine(i) ), width );
     }
 }

@@ -1,6 +1,6 @@
 /******************************************************************************
  * VncEGLFS - Copyright (C) 2022 Uwe Rathmann
- * This file may be used under the terms of the 3-clause BSD License
+ *            SPDX-License-Identifier: BSD-3-Clause
  *****************************************************************************/
 
 #include "VncClient.h"
@@ -16,7 +16,9 @@
 #include <qcoreapplication.h>
 #include <qendian.h>
 #include <qmetaobject.h>
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
 #include <qrandom.h>
+#endif
 #include <qtimer.h>
 #include <qvarlengtharray.h>
 #include <qwindow.h>
@@ -29,7 +31,9 @@ Q_LOGGING_CATEGORY( logFb, "vnceglfs.fb", QtCriticalMsg )
 // export QT_LOGGING_RULES="vnceglfs.rfb.debug=true"
 
 #include <openssl/evp.h>
-#include <openssl/evperr.h>
+#if ( OPENSSL_VERSION_NUMBER >= 0x1010100aL )
+    #include <openssl/evperr.h>
+#endif
 
 #if ( OPENSSL_VERSION_NUMBER >= 0x30000000L )
     #define VNC_SSL_PROVIDER
@@ -72,7 +76,7 @@ namespace
                 OSSL_PROVIDER_unload( m_provider[0] );
 
             if ( m_provider[1] )
-                OSSL_PROVIDER_unload( m_provider[1]
+                OSSL_PROVIDER_unload( m_provider[1] );
 #endif
         }
 
@@ -115,9 +119,9 @@ namespace
     };
 }
 
-namespace Rfb
+struct RfbData
 {
-    Q_NAMESPACE
+    // using a struct: moc does not support namespaces for Qt < 5.8.
 
     enum ClientState
     {
@@ -126,7 +130,7 @@ namespace Rfb
         Init,
         Connected
     };
-    Q_ENUM_NS( ClientState )
+    Q_ENUM( ClientState )
 
     enum Encoding : qint64
     {
@@ -181,12 +185,14 @@ namespace Rfb
         H264          = 20,
         JRLE          = 22,
     };
-    Q_ENUM_NS( Encoding )
-}
+    Q_ENUM( Encoding )
+
+    Q_GADGET
+};
 
 static inline QDebug operator<<( QDebug debug, const QVector< qint32 >& encodings )
 {
-    const auto mo = &Rfb::staticMetaObject;
+    const auto mo = &RfbData::staticMetaObject;
     const auto enumerator = mo->enumerator( mo->indexOfEnumerator( "Encoding" ) );
 
     debug.nospace();
@@ -229,7 +235,7 @@ static inline QDebug operator<<( QDebug debug, const QVector< qint32 >& encoding
             }
             else
             {
-                const auto hex = QString("0x") + QString::number( encoding, 16 );
+                const auto hex = QStringLiteral("0x%1").arg( QString::number( encoding, 16 ) );
                 debug << encoding << " ( " << hex << " )";
             }
         }
@@ -294,15 +300,14 @@ VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
 
     m_data->socket.open( socket );
 
-    // checking every 30ms for updates
-    m_data->updateTimer.setInterval( 30 );
+    m_data->updateTimer.setInterval( Vnc::timerInterval() );
     connect( &m_data->updateTimer, &QTimer::timeout, this, &VncClient::maybeSendFrameBuffer );
 
     // send protocol version
     const char proto[] = "RFB 003.003\n";
     m_data->socket.sendString( proto, 12 );
 
-    m_data->state = Rfb::Protocol;
+    m_data->state = RfbData::Protocol;
     qCDebug( logRfb ) << "State" << m_data->state;
 }
 
@@ -337,7 +342,7 @@ void VncClient::processClientData()
 
     auto socket = &m_data->socket;
 
-    if ( m_data->state == Rfb::Protocol )
+    if ( m_data->state == RfbData::Protocol )
     {
         if ( socket->bytesAvailable() >= 12 )
         {
@@ -360,14 +365,21 @@ void VncClient::processClientData()
             socket->sendUint32( auth );
 
             if ( auth == None )
-                m_data->state = Rfb::Init;
+                m_data->state = RfbData::Init;
             else
             {
-                auto r = QRandomGenerator::system();
                 m_data->challenge.resize( 16 );
+
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
+                auto r = QRandomGenerator::system();
                 r->generate( m_data->challenge.begin(), m_data->challenge.end() );
+#else
+                for ( int i = 0; i < m_data->challenge.size(); ++i )
+                    m_data->challenge[i] = qrand();
+#endif
+
                 socket->sendByteArray( m_data->challenge );
-                m_data->state = Rfb::Challenge;
+                m_data->state = RfbData::Challenge;
             }
 
             qCDebug( logRfb ) << "State" << m_data->state;
@@ -376,7 +388,7 @@ void VncClient::processClientData()
         return;
     }
 
-    if ( m_data->state == Rfb::Challenge )
+    if ( m_data->state == RfbData::Challenge )
     {
         if ( socket->bytesAvailable() >= 16 )
         {
@@ -391,12 +403,12 @@ void VncClient::processClientData()
             else
             {
                 socket->sendUint32( 0x00000000 );
-                m_data->state = Rfb::Init;
+                m_data->state = RfbData::Init;
             }
         }
     }
 
-    if ( m_data->state == Rfb::Init )
+    if ( m_data->state == RfbData::Init )
     {
         if ( socket->bytesAvailable() >= 1 )
         {
@@ -415,7 +427,7 @@ void VncClient::processClientData()
             socket->sendUint32( name.length() );
             socket->sendString( name.data(), name.length() );
 
-            m_data->state = Rfb::Connected;
+            m_data->state = RfbData::Connected;
 
             qCDebug( logRfb ) << "State" << m_data->state;
         }
@@ -423,7 +435,7 @@ void VncClient::processClientData()
         return;
     }
 
-    if ( m_data->state == Rfb::Connected )
+    if ( m_data->state == RfbData::Connected )
     {
         enum
         {
@@ -474,7 +486,7 @@ void VncClient::processClientData()
                     break;
 
                 default:
-                    qWarning("Unknown message type: %d", (int)m_data->messageType);
+                    qWarning("Unknown message type: %d", m_data->messageType);
                     done = true;
             }
 
@@ -564,7 +576,7 @@ bool VncClient::handleSetEncodings()
         m_data->jpegLevel = -1;
     }
 
-    const auto bytesAvailable = (unsigned) socket->bytesAvailable();
+    const auto bytesAvailable = static_cast<unsigned>( socket->bytesAvailable() );
     if ( bytesAvailable < count * sizeof( quint32 ) )
         return false;
 
@@ -573,16 +585,16 @@ bool VncClient::handleSetEncodings()
         const qint32 encoding = socket->receiveUint32();
         m_data->encodings += encoding;
 
-        if ( encoding == Rfb::Tight )
+        if ( encoding == RfbData::Tight )
         {
             m_data->tightEnabled = true;
         }
-        else if ( encoding == Rfb::Cursor )
+        else if ( encoding == RfbData::Cursor )
         {
             m_data->cursorEnabled = true;
             updateCursor();
         }
-        else if ( encoding == Rfb::DesktopSize )
+        else if ( encoding == RfbData::DesktopSize )
         {
             m_data->screenResizable = true;
         }

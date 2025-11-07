@@ -1,6 +1,6 @@
 /******************************************************************************
  * VncEGLFS - Copyright (C) 2022 Uwe Rathmann
- * This file may be used under the terms of the 3-clause BSD License
+ *            SPDX-License-Identifier: BSD-3-Clause
  *****************************************************************************/
 
 #include "RfbInputEventHandler.h"
@@ -126,6 +126,8 @@ void Rfb::handlePointerEvent( const QPointF& pos, quint8 buttonMask, QWindow* wi
         if ( buttonMask & ButtonRight )
             buttons |= Qt::RightButton;
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 11, 0)
+
         // what to do, when having inputs from different clients ???
         auto oldButtons = QGuiApplication::mouseButtons();
         oldButtons &= ( Qt::LeftButton | Qt::MiddleButton | Qt::RightButton );
@@ -150,6 +152,10 @@ void Rfb::handlePointerEvent( const QPointF& pos, quint8 buttonMask, QWindow* wi
 
         QWindowSystemInterface::handleMouseEvent(
             window, pos, pos, buttons, button, eventType, keyboardModifiers );
+#else
+        QWindowSystemInterface::handleMouseEvent(
+            window, pos, pos, buttons, keyboardModifiers );
+#endif
     }
 }
 
@@ -196,7 +202,7 @@ static QString keyText( quint32 qtkey, bool isLower, Qt::KeyboardModifiers modif
         if ( isLower )
             qtkey -= 'A' - 'a';
 
-        return QString( static_cast< char >( qtkey ) );
+        return QString( QLatin1Char( static_cast< char >( qtkey ) ) );
     }
 
     return QString();
@@ -251,22 +257,26 @@ void Rfb::handleKeyEvent( quint32 keysym, bool down, QWindow* window )
     if ( qtkey )
     {
         auto modifiers = QGuiApplication::keyboardModifiers();
-        const auto text = keyText( qtkey, isLower, modifiers );
+
+        // QFlags::setFlag is not available for Qt < 5.7
+        auto setModifier = [&modifiers]( Qt::KeyboardModifier modifier, bool down )
+            { if (down) modifiers |= modifier; else modifiers &= ~modifier; };
 
         if ( qtkey == Qt::Key_Shift )
         {
-            modifiers.setFlag( Qt::ShiftModifier, down );
+            setModifier( Qt::ShiftModifier, down );
         }
         else if ( qtkey == Qt::Key_Control )
         {
-            modifiers.setFlag( Qt::ControlModifier, down );
+            setModifier( Qt::ControlModifier, down );
         }
         else if ( qtkey == Qt::Key_Alt )
         {
-            modifiers.setFlag( Qt::AltModifier, down );
+            setModifier( Qt::AltModifier, down );
         }
 
         const auto eventType = down ? QEvent::KeyPress : QEvent::KeyRelease;
+        const auto text = keyText( qtkey, isLower, modifiers );
 
         QWindowSystemInterface::handleKeyEvent( window,
             eventType, qtkey, modifiers, text );

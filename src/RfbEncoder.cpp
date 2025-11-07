@@ -1,6 +1,6 @@
 /******************************************************************************
  * VncEGLFS - Copyright (C) 2022 Uwe Rathmann
- * This file may be used under the terms of the 3-clause BSD License
+ *            SPDX-License-Identifier: BSD-3-Clause
  *****************************************************************************/
 
 #include "RfbEncoder.h"
@@ -49,6 +49,7 @@ namespace
 
         void release() override
         {
+            m_encodedData.resize( 0 );
         }
 
       private:
@@ -136,7 +137,11 @@ void RfbEncoder::encode( const QImage& image, const QRect& rect )
 
         qCDebug( logEncoding ) << "JPEG:" << "quality:" << m_quality
             << "w:" << image.width() << "h:" << image.height()
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
             << "bytes:" << image.sizeInBytes()
+#else
+            << "bytes:" << image.byteCount()
+#endif
             << "->" << m_encoder->encodedData().size()
             << "ms: elapsed" << ms;
     }

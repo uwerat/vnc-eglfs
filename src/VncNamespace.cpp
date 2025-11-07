@@ -1,6 +1,6 @@
 /******************************************************************************
  * VncEGLFS - Copyright (C) 2022 Uwe Rathmann
- * This file may be used under the terms of the 3-clause BSD License
+ *            SPDX-License-Identifier: BSD-3-Clause
  *****************************************************************************/
 
 #include "VncNamespace.h"
@@ -245,6 +245,13 @@ void VncManager::setAutoStartEnabled( bool on )
 
     if ( on )
     {
+        if ( app == nullptr )
+        {
+            // TODO: using Q_COREAPP_STARTUP_FUNCTION instead of giving up
+            qWarning("VNC: you need to create the QCoreApplication instance first");
+            return;
+        }
+
         for ( auto window : QGuiApplication::topLevelWindows() )
         {
             if ( window->isExposed() )
@@ -255,8 +262,11 @@ void VncManager::setAutoStartEnabled( bool on )
     }
     else
     {
-        app->removeEventFilter( this );
+        if ( app )
+            app->removeEventFilter( this );
     }
+
+    m_autoStart = on;
 }
 
 bool VncManager::isAutoStartEnabled() const
