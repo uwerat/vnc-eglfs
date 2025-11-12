@@ -1,34 +1,21 @@
+/******************************************************************************
+ * VncEGLFS - Copyright (C) 2022 Uwe Rathmann
+ *            SPDX-License-Identifier: BSD-3-Clause
+ *****************************************************************************/
+
 #include "VncJpeg.h"
+
+#include <QtMinMax>
 #include <cstring>
-#include <arpa/inet.h>
 
-namespace VncJpeg
+/*
+    All tables and the creation of the header are JPEG standards
+    that should be available from libjpeg. TODO ...
+ */
+namespace
 {
-    Table::Table( const std::initializer_list< uint8_t >& list )
-        : std::vector< uint8_t >( list )
-    {
-    }
-
-    void Table::copyTo( void* to ) const
-    {
-        memcpy( to, data(), size() );
-    }
-}
-
-namespace VncJpeg
-{
-    QuantizationTable::QuantizationTable( const std::initializer_list< uint8_t >& list )
-        : std::vector< uint8_t >( list )
-    {
-    }
-
-    void QuantizationTable::copyTo( uint8_t* to ) const
-    {
-        for ( size_t i = 0; i < size(); i++ )
-            to[i] = sequenced( i );
-    }
-
-    uint8_t QuantizationTable::sequenced( int i ) const
+    std::vector< uint8_t > quantizationTable(
+        const std::vector< uint8_t >& values )
     {
         /*
             Zigzag scan order of the the Luma and Chroma components
@@ -46,80 +33,60 @@ namespace VncJpeg
             53,  60,  61,  54,  47,  55,  62,  63
         };
 
-        return at( zigzag[i] );
+        std::vector< uint8_t > table;
+        for ( auto pos : zigzag )
+            table.push_back( values[ zigzag[pos] ] );
+
+        return table;
     }
 }
 
-namespace
+namespace VncJpeg
 {
-    inline uint32_t bounded255( uint32_t value )
-    {
-        if ( value > 255 )
-            return 255;
-
-        if ( value < 1 )
-            return 1;
-
-        return value;
-    }
-
-    // ISO/IEC 10918-1
-
-    enum
-    {
-        SOI  = 0xFFD8, //Start of Image
-        EOI  = 0xFFD9, //End of Image
-        SOS  = 0xFFDA, //Start of Scan
-        DQT  = 0xFFDB, //Define Quantization Table
-        DRI  = 0xFFDD, //Define restart interval
-        RST0 = 0xFFD0, //Restart interval termination
-        DHT  = 0xFFC4, //Huffman table
-        SOF0 = 0xFFC0, //Baseline DCT
-        APP0 = 0xFFE0, //Application Segment
-        COM  = 0xFFFE  //Comment segment
-    };
-
     // Annex K, Table K.1
-    const VncJpeg::QuantizationTable lumaQuant =
-    {
-        16, 11, 10, 16, 24,  40,  51,  61,
-        12, 12, 14, 19, 26,  58,  60,  55,
-        14, 13, 16, 24, 40,  57,  69,  56,
-        14, 17, 22, 29, 51,  87,  80,  62,
-        18, 22, 37, 56, 68,  109, 103, 77,
-        24, 35, 55, 64, 81,  104, 113, 92,
-        49, 64, 78, 87, 103, 121, 120, 101,
-        72, 92, 95, 98, 112, 100, 103, 99
-    };
+
+    const Table lumaQuantization = quantizationTable(
+            {
+                16, 11, 10, 16, 24,  40,  51,  61,
+                12, 12, 14, 19, 26,  58,  60,  55,
+                14, 13, 16, 24, 40,  57,  69,  56,
+                14, 17, 22, 29, 51,  87,  80,  62,
+                18, 22, 37, 56, 68,  109, 103, 77,
+                24, 35, 55, 64, 81,  104, 113, 92,
+                49, 64, 78, 87, 103, 121, 120, 101,
+                72, 92, 95, 98, 112, 100, 103, 99
+            }
+        );
 
     //  Annex K, Table K.2
-    const VncJpeg::QuantizationTable chromaQuant =
-    {
-        17, 18, 24, 47, 99, 99, 99, 99,
-        18, 21, 26, 66, 99, 99, 99, 99,
-        24, 26, 56, 99, 99, 99, 99, 99,
-        47, 66, 99, 99, 99, 99, 99, 99,
-        99, 99, 99, 99, 99, 99, 99, 99,
-        99, 99, 99, 99, 99, 99, 99, 99,
-        99, 99, 99, 99, 99, 99, 99, 99,
-        99, 99, 99, 99, 99, 99, 99, 99
-    };
+    const Table chromaQuantization = quantizationTable(
+            {
+                17, 18, 24, 47, 99, 99, 99, 99,
+                18, 21, 26, 66, 99, 99, 99, 99,
+                24, 26, 56, 99, 99, 99, 99, 99,
+                47, 66, 99, 99, 99, 99, 99, 99,
+                99, 99, 99, 99, 99, 99, 99, 99,
+                99, 99, 99, 99, 99, 99, 99, 99,
+                99, 99, 99, 99, 99, 99, 99, 99,
+                99, 99, 99, 99, 99, 99, 99, 99
+            }
+        );
 
     // K.3.3.1 is the summarized version of Table K.3
 
-    VncJpeg::Table dcCoefficientsLuminance =
+    const Table dcCoefficientsLuminance =
     {
         0x00, 0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01,
         0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     };
 
-    const VncJpeg::Table dcCoefficientsChroma =
+    const Table dcCoefficientsChroma =
     {
         0x00, 0x03, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
         0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
 
-    const VncJpeg::Table dcValues =
+    const Table dcValues =
     {
         0x00, 0x01, 0x02, 0x03, 0x04, 0x05,
         0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B
@@ -127,13 +94,13 @@ namespace
 
     //K.3.3.2 is the summarized version of Table K.5
 
-    const VncJpeg::Table acCoefficientsLuminance =
+    const Table acCoefficientsLuminance =
     {
         0x00, 0x02, 0x01, 0x03, 0x03, 0x02, 0x04, 0x03,
         0x05, 0x05, 0x04, 0x04, 0x00, 0x00, 0x01, 0x7D,
     };
 
-    const VncJpeg::Table acValuesLuminance =
+    const Table acValuesLuminance =
     {
         0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12,
         0x21, 0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07,
@@ -162,13 +129,13 @@ namespace
 
     // K.3.3.2 is the summarized version of Table K.6
 
-    const VncJpeg::Table acCoefficientsChroma =
+    const Table acCoefficientsChroma =
     {
         0x00, 0x02, 0x01, 0x02, 0x04, 0x04, 0x03, 0x04,
         0x07, 0x05, 0x04, 0x04, 0x00, 0x01, 0x02, 0x77,
     };
 
-    const VncJpeg::Table acValuesChroma =
+    const Table acValuesChroma =
     {
         0x00, 0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21,
         0x31, 0x06, 0x12, 0x41, 0x51, 0x07, 0x61, 0x71,
@@ -196,19 +163,21 @@ namespace
 
 namespace VncJpeg
 {
-    const Table& dcCoefficientsLuminance() { return ::dcCoefficientsLuminance; }
-    const Table& dcCoefficientsChroma() { return ::dcCoefficientsChroma; }
-    const Table& dcValues() { return ::dcValues; }
-    const Table& acCoefficientsLuminance() { return ::acCoefficientsLuminance; }
-    const Table& acCoefficientsChroma() { return ::acCoefficientsChroma; }
-    const Table& acValuesLuminance() { return ::acValuesLuminance; }
-    const Table& acValuesChroma() { return ::acValuesChroma; }
-
-    const QuantizationTable& lumaQuantization() { return ::lumaQuant; }
-    const QuantizationTable& chromaQuantization() { return ::chromaQuant; }
-
     Header::Header( int width, int height, int quality )
     {
+        // ISO/IEC 10918-1
+        enum
+        {
+            SOI  = 0xFFD8, //Start of Image
+            SOS  = 0xFFDA, //Start of Scan
+            DQT  = 0xFFDB, //Define Quantization Table
+            DHT  = 0xFFC4, //Huffman table
+            SOF0 = 0xFFC0, //Baseline DCT
+            APP0 = 0xFFE0, //Application Segment
+        };
+
+        const int num_components = 3;
+
         add16( SOI ); // Start of Image
 
         // -- Application Segment
@@ -220,15 +189,9 @@ namespace VncJpeg
         add8( 1 );             //Major Version
         add8( 1 );             //Minor Version
 
-    #if 0
-        add8( 1 );   // 
-        add16( 72 );
-        add16( 72 );
-    #else
-        add8( 0 );  // 0: no units, 1: pixels per inch, 2: pixels per cm
-        add16( 1 ); // X pixel-aspect-ratio
-        add16( 1 ); // Y pixel-aspect-ratio
-    #endif
+        add8( 1 );   // 0: no units, 1: pixels per inch, 2: pixels per cm
+        add16( 72 ); // X pixel-aspect-ratio
+        add16( 72 ); // Y pixel-aspect-ratio
 
         // Thumbnail width/height
         add8( 0 );
@@ -236,20 +199,21 @@ namespace VncJpeg
 
         // -- Quantization Tables
 
-        const int qFactor = ( quality < 50 ) ? ( 5000 / quality ) : ( 200 - ( quality * 2 ) );
+        // Normalization of quality factor
+        quality = ( quality < 50 ) ? ( 5000 / quality ) : ( 200 - ( quality * 2 ) );
 
-        for ( int i = 0; i <= 1; i++ )
+        for ( int i = 0; i < 2; i++ )
         {
-            const auto& quant = ( i == 0 ) ? lumaQuant : chromaQuant;
+            const auto& quant = ( i == 0 ) ? lumaQuantization : chromaQuantization;
 
             add16( DQT );
             add16( 3 + quant.size() );
-            add2x4( 0, ( i == 0 ) ? 0 : 1 ); // Pq, Tq
+            add2x4( 0, i ); // Pq, Tq
 
             for ( size_t i = 0; i < quant.size(); i++ )
             {
-                uint32_t qk = quant.sequenced( i );
-                qk = bounded255( ( qk * qFactor ) / 100 );
+                uint32_t qk = quant[ i ];
+                qk = qBound( 1U, ( qk * quality ) / 100, 255U );
 
                 add8( qk );
             }
@@ -259,16 +223,16 @@ namespace VncJpeg
 
         add16( SOF0 );
 
-        add16( 8 + 3 * 3 ); // num bytes
+        add16( 8 + 3 * num_components ); // num bytes
 
         add8( 8 );       // sample_precision
         add16( height );
         add16( width );
 
-        add8( 3 );       // num_components
+        add8( num_components );
 
         add8( 1 );       // id
-        add2x4( 1, 1 );  // horizontal/vertical factors
+        add2x4( 2, 2 );  // horizontal/vertical factors
         add8( 0 );       // quant_table_selector
 
         add8( 2 );       // id
@@ -282,35 +246,35 @@ namespace VncJpeg
         // -- Huffman Tables
 
         add16( DHT );
-        add16( 3 + dcCoefficientsLuminance().size() + dcValues().size() );
+        add16( 3 + dcCoefficientsLuminance.size() + dcValues.size() );
         add2x4( 0, 0 ); // DC, Huffman table id
-        addBytes( dcCoefficientsLuminance() );
-        addBytes( dcValues() );
+        addBytes( dcCoefficientsLuminance );
+        addBytes( dcValues );
 
         add16( DHT );
-        add16( 3 + acCoefficientsLuminance().size() + acValuesLuminance().size() );
+        add16( 3 + acCoefficientsLuminance.size() + acValuesLuminance.size() );
         add2x4( 1, 0 ); // AC, Huffman table id
-        addBytes( acCoefficientsLuminance() );
-        addBytes( acValuesLuminance() );
+        addBytes( acCoefficientsLuminance );
+        addBytes( acValuesLuminance );
 
         add16( DHT );
-        add16( 3 + dcCoefficientsChroma().size() + dcValues().size() );
+        add16( 3 + dcCoefficientsChroma.size() + dcValues.size() );
         add2x4( 0, 1 ); // DC, Huffman table id
-        addBytes( dcCoefficientsChroma() );
-        addBytes( dcValues() );
+        addBytes( dcCoefficientsChroma );
+        addBytes( dcValues );
 
         add16( DHT );
-        add16( 3 + acCoefficientsChroma().size() + acValuesChroma().size() );
+        add16( 3 + acCoefficientsChroma.size() + acValuesChroma.size() );
         add2x4( 1, 1 ); // AC, Huffman table id
-        addBytes( acCoefficientsChroma() );
-        addBytes( acValuesChroma() );
+        addBytes( acCoefficientsChroma );
+        addBytes( acValuesChroma );
 
         // -- Start of Scan
 
         add16( SOS );
-        add16( 3 + 3 * 2 + 3 );
+        add16( 3 + ( num_components * 2 ) + 3 );
 
-        add8( 3 ); // num components
+        add8( num_components ); // num components
 
         add8( 1 ); // Y
         add2x4( 0, 0 );
@@ -338,10 +302,9 @@ namespace VncJpeg
 
     void Header::add16( uint16_t val )
     {
-        val = htons( val ); // ???
-
-        add8( val & 0xff );
+        // always big endian
         add8( val >> 8 );
+        add8( val & 0xff );
     }
 
     void Header::addBytes( const std::vector< uint8_t >& bytes )

@@ -69,20 +69,12 @@ namespace
       public:
         EncoderVa()
         {
-            m_vaEncoder.open();
+            m_encoder.open();
         }
 
         void encode( const QImage& image, int quality ) override
         {
-            m_vaEncoder.encode( image.constBits(),
-                image.width(), image.height(), quality );
-
-            uint8_t* data;
-            size_t size;
-
-            m_vaEncoder.mapEncoded( data, size );
-            m_encodedData.setRawData(
-                reinterpret_cast< const char* >( data ), size );
+            m_encodedData = m_encoder.encodeJPG( image, quality );
         }
 
         const QByteArray& encodedData() const override
@@ -92,12 +84,11 @@ namespace
 
         void release() override
         {
-            m_encodedData.clear();
-            m_vaEncoder.unmapEncoded();
+            m_encodedData.resize( 0 );
         }
 
       private:
-        VncVaEncoder m_vaEncoder;
+        VncVaEncoder m_encoder;
         QByteArray m_encodedData;
     };
 }

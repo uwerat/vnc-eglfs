@@ -27,14 +27,14 @@ list(APPEND SOURCES
 
 list(APPEND HEADERS
     va/VncJpeg.h
+    va/VncVaJpegRenderer.h
     va/VncVaEncoder.h
-    va/VncVaRenderer.h
 )
 
 list(APPEND SOURCES
     va/VncJpeg.cpp
+    va/VncVaJpegRenderer.cpp
     va/VncVaEncoder.cpp
-    va/VncVaRenderer.cpp
 )
 
 set(target qvnceglfs)

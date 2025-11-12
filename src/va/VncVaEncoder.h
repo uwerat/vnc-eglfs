@@ -1,14 +1,17 @@
 /******************************************************************************
  * VncEGLFS - Copyright (C) 2022 Uwe Rathmann
- * This file may be used under the terms of the 3-clause BSD License
+ *            SPDX-License-Identifier: BSD-3-Clause
  *****************************************************************************/
 
 #pragma once
 
-#include <cinttypes>
+#include "VncVaJpegRenderer.h"
+
+#include <QSize>
 #include <va/va.h>
 
-class VncVaRenderer;
+class QByteArray;
+class QImage;
 
 class VncVaEncoder
 {
@@ -19,29 +22,25 @@ class VncVaEncoder
     bool open();
     void close();
 
-    bool isOpen() const;
+    void setSize( const QSize& );
 
-    void encode( const uint8_t*, int width, int height, int quality );
-
-    void mapEncoded( uint8_t*&, size_t& size );
-    void unmapEncoded();
+    QByteArray encodeJPG( const QImage&, int quality );
 
   private:
     bool openDisplay();
     void closeDisplay();
 
-    void resizeSurface( int width, int height );
-    void render( const uint8_t* );
+    QByteArray targetBufferData();
 
-    bool isEncoding() const;
-
-  private:
-    int m_fd = -1;
     VADisplay m_display = 0;
+    int m_drmFd = -1;
 
-    VAConfigID m_configId = 0;
-    VASurfaceID m_surfaceId = 0;
-    VAContextID m_contextId = 0;
+    VAConfigID m_configId = VA_INVALID_ID;
+    VASurfaceID m_surfaceId = VA_INVALID_ID;
 
-    VncVaRenderer* m_renderer = nullptr;
+    VAContextID m_contextId = VA_INVALID_ID;
+    VABufferID m_targetId = VA_INVALID_ID;
+
+    QSize m_size;
+    VncVaJpegRenderer m_encoder;
 };
