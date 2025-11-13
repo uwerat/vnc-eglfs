@@ -536,11 +536,11 @@ void VncClient::maybeSendFrameBuffer()
 
     if ( m_data->tightEnabled && m_data->jpegLevel >= 0 )
     {
-        streamer.sendImageJPEG( fb, rect, m_data->jpegLevel, &m_data->socket );
+        streamer.sendImageJPEG( fb, { rect }, m_data->jpegLevel, &m_data->socket );
     }
     else
     {
-        streamer.sendImageRaw( fb, rect, &m_data->socket );
+        streamer.sendImageRaw( fb, { rect }, &m_data->socket );
     }
 }
 
