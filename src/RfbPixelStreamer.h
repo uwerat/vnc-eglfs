@@ -5,11 +5,13 @@
 
 #pragma once
 
-#include <qregion.h>
+#include <qvector.h>
 #include <memory>
 
 class RfbSocket;
 class QImage;
+class QRect;
+class QPoint;
 
 class RfbPixelStreamer
 {
@@ -17,8 +19,11 @@ class RfbPixelStreamer
     RfbPixelStreamer();
     ~RfbPixelStreamer();
 
-    void sendImageRaw( const QImage&, const QRegion&, RfbSocket* );
-    void sendImageJPEG( const QImage&, const QRegion&, int qualityLevel, RfbSocket* );
+    void sendImageRaw( const QImage&,
+        const QVector< QRect >&, RfbSocket* );
+
+    void sendImageJPEG( const QImage&,
+        const QVector< QRect >&, int qualityLevel, RfbSocket* );
 
     void sendCursor( const QPoint&, const QImage&, RfbSocket* );
 

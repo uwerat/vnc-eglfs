@@ -232,21 +232,14 @@ void RfbPixelStreamer::sendImageData(
 }
 
 void RfbPixelStreamer::sendImageRaw(
-    const QImage& image, const QRegion& region, RfbSocket* socket )
+    const QImage& image, const QVector< QRect >& rects, RfbSocket* socket )
 {
-    if ( region.isEmpty() )
-        return;
-
     socket->sendUint8( 0 ); // msg type
     socket->sendPadding( 1 );
 
-    socket->sendUint16( region.rectCount() );
+    socket->sendUint16( rects.count() );
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
-    for ( const QRect& rect : region )
-#else
-    for ( const QRect& rect : region.rects() )
-#endif
+    for ( const QRect& rect : rects )
     {
         socket->sendRect64( rect );
 
@@ -258,7 +251,7 @@ void RfbPixelStreamer::sendImageRaw(
 }
 
 void RfbPixelStreamer::sendImageJPEG(
-    const QImage& image, const QRegion& region, int qualityLevel, RfbSocket* socket )
+    const QImage& image, const QVector< QRect >& rects, int qualityLevel, RfbSocket* socket )
 {
     auto& encoder = m_data->encoder;
 
@@ -270,29 +263,22 @@ void RfbPixelStreamer::sendImageJPEG(
 
     socket->sendUint16( 1 );
 
-    QRegion tightRegion;
+    // Tight encoding limits the width of a rectangle
+    const int maxWidth = 2048;
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
-    for ( const QRect& rect : region )
-#else
-    for ( const QRect& rect : region.rects() )
-#endif
+    QVector< QRect > tightRects;
+    tightRects.reserve( image.width() / maxWidth + 1 ); // guessing fullscreen
+
+    for ( const QRect& rect : rects )
     {
-        // Tight encoding limits the width of a rectangle
-        const int maxWidth = 2048;
-
         for ( int x = rect.x(); x < rect.x() + rect.width(); x += maxWidth )
         {
             const int width = qMin( maxWidth, rect.x() + rect.width() - x );
-            tightRegion += QRect( x, rect.y(), width, rect.height() );
+            tightRects += QRect( x, rect.y(), width, rect.height() );
         }
     }
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
-    for ( const QRect& rect : tightRegion )
-#else
-    for ( const QRect& rect : tightRegion.rects() )
-#endif
+    for ( const QRect& rect : tightRects )
     {
         socket->sendRect64( rect );
 
