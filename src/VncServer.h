@@ -51,6 +51,7 @@ class VncServer final : public QObject
 
     mutable QMutex m_frameBufferMutex;
     QImage m_frameBuffer;
+    unsigned int m_textureId = 0;
 
     VncCursor m_cursor;
 

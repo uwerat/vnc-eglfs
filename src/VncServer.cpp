@@ -16,6 +16,8 @@
 
 #include <qpa/qplatformcursor.h>
 
+#include <QOpenGLExtraFunctions>
+
 Q_LOGGING_CATEGORY( logGrab, "vnceglfs.grab", QtCriticalMsg )
 Q_LOGGING_CATEGORY( logConnection, "vnceglfs.connection" )
 
@@ -142,6 +144,12 @@ VncServer::~VncServer()
         thread->quit();
         thread->wait( 20 );
     }
+
+    if ( m_textureId )
+    {
+        GLuint textureId = m_textureId;
+        QOpenGLContext::currentContext()->functions()->glDeleteTextures(1, &textureId);
+    }
 }
 
 int VncServer::port() const
@@ -203,116 +211,110 @@ void VncServer::setTimerInterval( int ms )
     }
 }
 
-static inline bool isOpenGL12orBetter( const QOpenGLContext* context )
+static void fillTexture( const unsigned int textureId, const QSize& size )
 {
-    if ( context->isOpenGLES() )
-        return false;
+    const int width = size.width();
+    const int height = size.height();
 
-    const auto fmt = context->format();
-    return ( fmt.majorVersion() >= 2 ) || ( fmt.minorVersion() >= 2 );
-}
-
-static void grabWindow( QImage& frameBuffer )
-{
-    QElapsedTimer timer;
-
-    if ( logGrab().isDebugEnabled() )
-        timer.start();
-
-#if 0
     const auto context = QOpenGLContext::currentContext();
 
-    if ( isOpenGL12orBetter( context ) )
+    auto& f = *context->functions();
+
+    f.glBindTexture( GL_TEXTURE_2D, textureId );
+    f.glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8,
+        size.width(), size.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    f.glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+    f.glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+
+    GLuint fbo;
+    f.glGenFramebuffers( 1, &fbo );
+    f.glBindFramebuffer( GL_DRAW_FRAMEBUFFER, fbo );
+
+    f.glFramebufferTexture2D( GL_DRAW_FRAMEBUFFER,
+        GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureId, 0 );
+
+    if ( f.glCheckFramebufferStatus( GL_DRAW_FRAMEBUFFER ) != GL_FRAMEBUFFER_COMPLETE )
+        qDebug() << "FBO setup failed!";
+
+    f.glBindFramebuffer( GL_READ_FRAMEBUFFER, 0 );
+    context->extraFunctions()->glReadBuffer( GL_BACK );
+
     {
-        #ifndef GL_BGRA
-            #define GL_BGRA 0x80E1
-        #endif
+        typedef void ( QOPENGLF_APIENTRYP PFNGLBLITFRAMEBUFFERPROC )(
+            GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLbitfield,GLenum);
 
-        #ifndef GL_UNSIGNED_INT_8_8_8_8_REV
-            #define GL_UNSIGNED_INT_8_8_8_8_REV 0x8367
-        #endif
+        auto blitFBO = (PFNGLBLITFRAMEBUFFERPROC) context->getProcAddress("glBlitFramebuffer");
 
-        context->functions()->glReadPixels(
-            0, 0, frameBuffer.width(), frameBuffer.height(),
-            GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, frameBuffer.bits() );
-
-        // OpenGL images are vertically flipped.
-        frameBuffer = std::move( frameBuffer ).mirrored( false, true );
+        blitFBO( 0, 0, width, height,
+            0, height, width, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST ); // copy + flip
     }
-    else
-    {
-        QImage image( frameBuffer.size(), QImage::Format_RGBX8888 );
+
+    f.glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+    f.glDeleteFramebuffers( 1, &fbo );
+}
+
+static QImage grabTexture( const unsigned int textureId, const QSize& size )
+{
+    QImage image( size, QImage::Format_RGB32 );
+
+    auto& f = *QOpenGLContext::currentContext()->functions();
+
+    f.glBindTexture(GL_TEXTURE_2D, textureId );
+
+    const GLenum glFormat = GL_BGRA;
 #if 0
-        image.fill( Qt::white ); // for debugging only
-#endif
-
-        context->functions()->glReadPixels(
-            0, 0, frameBuffer.width(), frameBuffer.height(),
-            GL_RGBA, GL_UNSIGNED_BYTE, image.bits() );
-
-        // inplace conversion/mirroring in one pass: TODO ...
-        if ( image.format() != frameBuffer.format() )
-        {
-#if QT_VERSION < QT_VERSION_CHECK( 5, 13, 0 )
-            image = image.convertToFormat( frameBuffer.format() );
+    glGetTexImage( GL_TEXTURE_2D, 0, glFormat, GL_UNSIGNED_BYTE, image.bits() );
 #else
-            image.convertTo( frameBuffer.format() );
-#endif
-        }
 
-        // OpenGL images are vertically flipped.
-        frameBuffer = image.mirrored( false, true );
-    }
-#else
-    // avoiding native OpenGL calls
+    // Create a temporary framebuffer
+    GLuint fbo = 0;
+    f.glGenFramebuffers(1, &fbo);
+    f.glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
-    extern QImage qt_gl_read_framebuffer(
-        const QSize&, bool alpha_format, bool include_alpha );
+    // Attach the texture
+    f.glFramebufferTexture2D(GL_FRAMEBUFFER,
+        GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureId, 0);
 
-    const auto format = frameBuffer.format();
-    frameBuffer = qt_gl_read_framebuffer( frameBuffer.size(), false, false );
+    // Check FBO completeness
+    GLenum status = f.glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if ( status != GL_FRAMEBUFFER_COMPLETE )
+        qDebug() << "FBO setup failed!";
 
-    if ( frameBuffer.format() != format )
-    {
-#if QT_VERSION < QT_VERSION_CHECK( 5, 13, 0 )
-        frameBuffer = frameBuffer.convertToFormat( format );
-#else
-        frameBuffer.convertTo( format );
-#endif
-    }
+    // Read pixels from the framebuffer
+    f.glReadPixels(0, 0, size.width(), size.height(),
+        glFormat, GL_UNSIGNED_BYTE, image.bits() );
 
+    // Clean up framebuffer
+    f.glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    f.glDeleteFramebuffers(1, &fbo);
 #endif
 
-    if ( logGrab().isDebugEnabled() )
-    {
-        qCDebug( logGrab ) << "grabWindow:" << timer.elapsed() << "ms";
-    }
+    return image;
 }
 
 void VncServer::updateFrameBuffer()
 {
+    const auto size = m_window->size() * m_window->devicePixelRatio();
+
     {
         QMutexLocker locker( &m_frameBufferMutex );
 
-        const auto size = m_window->size() * m_window->devicePixelRatio();
-        if ( size != m_frameBuffer.size() )
+        if ( m_textureId == 0 )
         {
-            /*
-                On EGLFS the window always matches the screen size.
+            auto context = QOpenGLContext::currentContext();
+            context->extraFunctions()->initializeOpenGLFunctions();
 
-                But when testing the implementation on X11 the window
-                might be resized manually later. Should be no problem,
-                as most clients indicate being capable of adjustments
-                of the framebuffer size. ( "DesktopSize" pseudo encoding )
-             */
-
-            m_frameBuffer = QImage( size, QImage::Format_RGB32 );
+            GLuint textureId;
+            context->functions()->glGenTextures( 1, &textureId );
+            m_textureId = textureId;
         }
 
-        grabWindow( m_frameBuffer );
+        fillTexture( m_textureId, size );
     }
 
-    const QRect rect( 0, 0, m_frameBuffer.width(), m_frameBuffer.height() );
+    m_frameBuffer = grabTexture( m_textureId, size );
+
+    const QRect rect( 0, 0, size.width(), size.height() );
 
     const auto& threads = m_threads;
     for ( auto thread : threads )
