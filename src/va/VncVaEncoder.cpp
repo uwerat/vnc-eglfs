@@ -14,13 +14,8 @@
 #include <QDebug>
 
 #include <va/va.h>
+#include <va/va_vpp.h>
 #include <va/va_drm.h>
-
-static inline uint8_t clampToByte(float v)
-{
-    const int b = v + 0.5f;
-    return ( b < 0 ) ? 0 : ( b > 255 ) ? 255 : b;
-}
 
 static inline int yuvSize( const QSize& size )
 {
@@ -30,104 +25,74 @@ static inline int yuvSize( const QSize& size )
     return w * h + 2 * ceil( 0.5 * w ) * ceil( 0.5 * h );
 }
 
-void rgbaToNV12( const uint8_t* rgba, int width, int height, uint8_t* nv12 )
+static void uploadBGR( VADisplay vaDisplay,
+    const uint8_t* bgr, VAImage& vaImage )
 {
-    uint8_t* y_plane = nv12;
-    uint8_t* uv_plane = nv12 + width * height;
+    const auto numLineBytes = vaImage.width * 4;
+    const auto numRows = vaImage.height;
 
-    // --- Luma (Y) plane ---
-    for ( int y = 0; y < height; y++ )
+    uint8_t* buf = NULL;
+    vaMapBuffer( vaDisplay, vaImage.buf, reinterpret_cast< void** >( &buf ) );
+
+    auto scanLine = buf + vaImage.offsets[0];
+    for ( int row = 0; row < numRows; row++ )
     {
-        for (int x = 0; x < width; x++)
-        {
-            const int idx = ( y * width + x ) * 4;
+        memcpy( scanLine, bgr, numLineBytes );
 
-            const auto b = rgba[idx + 0];
-            const auto g = rgba[idx + 1];
-            const auto r = rgba[idx + 2];
-
-            // BT.709 luma conversion
-            const float Yf = 0.2126f * r + 0.7152f * g + 0.0722f * b;
-
-            y_plane[y * width + x] = clampToByte(Yf);
-        }
-    }
-
-    // --- Chroma (UV) plane ---
-    for ( int y = 0; y < height; y += 2 )
-    {
-        const auto uv = uv_plane + ( y / 2 ) * width;
-
-        for ( int x = 0; x < width; x += 2 )
-        {
-            float Usum = 0.0f, Vsum = 0.0f;
-
-            // Average over 2x2 block
-            for ( int j = 0; j < 2; ++j )
-            {
-                for ( int i = 0; i < 2; ++i )
-                {
-                    const int sx = std::min(x + i, width - 1);
-                    const int sy = std::min(y + j, height - 1);
-
-                    const int idx = ( sy * width + sx ) * 4;
-
-                    const auto b = rgba[idx + 0];
-                    const auto g = rgba[idx + 1];
-                    const auto r = rgba[idx + 2];
-
-                    // BT.709 chroma
-                    Usum += ( -0.1146f * r - 0.3854f * g + 0.5000f * b + 128.0f );
-                    Vsum += ( 0.5000f * r - 0.4542f * g - 0.0458f * b + 128.0f );
-                }
-            }
-
-            uv[x + 0] = clampToByte( Usum / 4.0f );
-            uv[x + 1] = clampToByte( Vsum / 4.0f );
-        }
-    }
-}
-
-static inline QVector< uint8_t > imageToNV12( const QImage& image )
-{
-    QVector< uint8_t > bytes( yuvSize( image.size() ) );
-    const uint8_t* rgb = reinterpret_cast< const uint8_t* >( image.constBits() );
-
-    rgbaToNV12( rgb, image.width(), image.height(), bytes.data() );
-
-    return bytes;
-}
-
-static void uploadNV12( VADisplay vaDisplay,
-    const uint8_t* nv12, VAImage& vaImage )
-{
-    uint8_t* vaBuffer = NULL;
-    vaMapBuffer( vaDisplay, vaImage.buf, reinterpret_cast< void** >( &vaBuffer ) );
-
-    {
-        const auto width = vaImage.width;
-        const auto height = vaImage.height;
-
-        const auto yPlane = nv12;
-        const auto uvPlane = nv12 + width * height;
-
-        const auto yPlaneVA = vaBuffer + vaImage.offsets[0];
-        const auto uvPlaneVA = vaBuffer + vaImage.offsets[1];
-
-        for ( int row = 0; row < height; row++)
-        {
-            memcpy( yPlaneVA + row * vaImage.pitches[0],
-                yPlane + row * width, width );
-        }
-
-        for ( int row = 0; row < height / 2; row++)
-        {
-            memcpy( uvPlaneVA + row * vaImage.pitches[1],
-                uvPlane + row * width, width );
-        }
+        scanLine += vaImage.pitches[0];
+        bgr += numLineBytes;
     }
 
     vaUnmapBuffer( vaDisplay, vaImage.buf );
+}
+
+static void convertToNV12( VADisplay display, const QSize& size,
+    VASurfaceID pixelSurface, VASurfaceID yuvSurface )
+{
+    VAConfigID config;
+    auto vaStatus = vaCreateConfig( display, VAProfileNone,
+        VAEntrypointVideoProc, nullptr, 0, &config);
+    if ( vaStatus != VA_STATUS_SUCCESS )
+        qWarning() << "vaCreateConfig:" << vaErrorStr( vaStatus );
+
+    VAContextID context;
+    vaStatus = vaCreateContext( display, config, size.width(), size.height(),
+        VA_PROGRESSIVE, &yuvSurface, 1, &context);
+    if ( vaStatus != VA_STATUS_SUCCESS )
+        qWarning() << "vaCreateContext:" << vaErrorStr( vaStatus );
+
+    VABufferID yuvBufferID;
+    {
+        VAProcPipelineParameterBuffer params = {};
+        params.surface = pixelSurface;
+
+        vaStatus = vaCreateBuffer( display, context,
+            VAProcPipelineParameterBufferType, sizeof( params ), 1, &params, &yuvBufferID );
+
+        if ( vaStatus != VA_STATUS_SUCCESS )
+            qWarning() << "vaCreateBuffer:" << vaErrorStr( vaStatus );
+    }
+
+    {
+        vaStatus = vaBeginPicture( display, context, yuvSurface);
+        if ( vaStatus != VA_STATUS_SUCCESS )
+            qWarning() << "vaBeginPicture:" << vaErrorStr( vaStatus );
+
+        vaStatus = vaRenderPicture( display, context, &yuvBufferID, 1);
+        if ( vaStatus != VA_STATUS_SUCCESS )
+            qWarning() << "vaBeginPicture:" << vaErrorStr( vaStatus );
+
+        vaStatus = vaEndPicture( display, context);
+        if ( vaStatus != VA_STATUS_SUCCESS )
+            qWarning() << "vaEndPicture:" << vaErrorStr( vaStatus );
+    }
+
+    vaStatus = vaSyncSurface( display, yuvSurface);
+    if ( vaStatus != VA_STATUS_SUCCESS )
+        qWarning() << "vaBeginPicture:" << vaErrorStr( vaStatus );
+
+    vaDestroyContext( display, context);
+    vaDestroyConfig( display, config);
 }
 
 VncVaEncoder::VncVaEncoder()
@@ -198,10 +163,10 @@ void VncVaEncoder::setSize( const QSize& size )
 
     m_size = size;
 
-    if ( m_targetId != VA_INVALID_ID )
+    if ( m_jpegBufferId != VA_INVALID_ID )
     {
-        vaDestroyBuffer( m_display, m_targetId );
-        m_targetId = VA_INVALID_ID;
+        vaDestroyBuffer( m_display, m_jpegBufferId );
+        m_jpegBufferId = VA_INVALID_ID;
     }
 
     if ( m_contextId != VA_INVALID_ID )
@@ -210,10 +175,10 @@ void VncVaEncoder::setSize( const QSize& size )
         m_contextId = VA_INVALID_ID;
     }
 
-    if ( m_surfaceId != VA_INVALID_ID )
+    if ( m_yuvSurfaceId != VA_INVALID_ID )
     {
-        vaDestroySurfaces( m_display, &m_surfaceId, 1 );
-        m_surfaceId = VA_INVALID_ID;
+        vaDestroySurfaces( m_display, &m_yuvSurfaceId, 1 );
+        m_yuvSurfaceId = VA_INVALID_ID;
     }
 
     if ( m_size.isEmpty() )
@@ -227,7 +192,7 @@ void VncVaEncoder::setSize( const QSize& size )
         attrib.value.value.i = VA_FOURCC_NV12;
 
         auto vaStatus = vaCreateSurfaces(m_display, VA_RT_FORMAT_YUV420,
-            size.width(), size.height(), &m_surfaceId, 1, &attrib, 1);
+            size.width(), size.height(), &m_yuvSurfaceId, 1, &attrib, 1);
 
         if ( vaStatus != VA_STATUS_SUCCESS )
             qWarning() << "vaCreateSurfaces:" << vaErrorStr( vaStatus );
@@ -235,14 +200,14 @@ void VncVaEncoder::setSize( const QSize& size )
 
     {
         auto vaStatus = vaCreateContext( m_display, m_configId,
-            size.width(), size.height(), VA_PROGRESSIVE, &m_surfaceId, 1, &m_contextId);
+            size.width(), size.height(), VA_PROGRESSIVE, &m_yuvSurfaceId, 1, &m_contextId);
         if ( vaStatus != VA_STATUS_SUCCESS )
             qWarning() << "vaCreateContext:" << vaErrorStr( vaStatus );
     }
 
     {
         auto vaStatus = vaCreateBuffer( m_display, m_contextId,
-            VAEncCodedBufferType, yuvSize( m_size ), 1, nullptr, &m_targetId);
+            VAEncCodedBufferType, yuvSize( m_size ), 1, nullptr, &m_jpegBufferId);
         if ( vaStatus != VA_STATUS_SUCCESS )
             qWarning() << "vaCreateBuffer:" << vaErrorStr( vaStatus );
     }
@@ -300,11 +265,11 @@ void VncVaEncoder::closeDisplay()
     }
 }
 
-QByteArray VncVaEncoder::targetBufferData()
+QByteArray VncVaEncoder::bufferData( VABufferID bufferId ) const
 {
     VACodedBufferSegment* segment;
 
-    auto vaStatus = vaMapBuffer( m_display, m_targetId, (void**)( &segment ) );
+    auto vaStatus = vaMapBuffer( m_display, bufferId, (void**)( &segment ) );
     if ( vaStatus != VA_STATUS_SUCCESS )
         qWarning() << "vaMapBuffer:" << vaErrorStr( vaStatus );
 
@@ -312,7 +277,7 @@ QByteArray VncVaEncoder::targetBufferData()
     if ( !( segment->status & VA_CODED_BUF_STATUS_SLICE_OVERFLOW_MASK ) )
         data.append( (const char*)segment->buf, segment->size );
 
-    vaStatus = vaUnmapBuffer( m_display, m_targetId );
+    vaStatus = vaUnmapBuffer( m_display, bufferId );
     if ( vaStatus != VA_STATUS_SUCCESS )
         qWarning() << "vaUnmapBuffer:" << vaErrorStr( vaStatus );
 
@@ -321,26 +286,47 @@ QByteArray VncVaEncoder::targetBufferData()
 
 QByteArray VncVaEncoder::encodeJPG( const QImage& image, const int quality )
 {
+    VAStatus vaStatus;
+
     setSize( image.size() );
 
-    const auto buffer = imageToNV12( image );
+    VASurfaceID bgra_surface;
+
+    {
+        VASurfaceAttrib attrib;
+        attrib.type = VASurfaceAttribPixelFormat;
+        attrib.flags = VA_SURFACE_ATTRIB_SETTABLE;
+        attrib.value.type = VAGenericValueTypeInteger;
+        attrib.value.value.i = VA_FOURCC_BGRA; // why not VA_FOURCC_RGBA
+
+        vaStatus = vaCreateSurfaces( m_display, VA_RT_FORMAT_RGB32,
+            image.width(), image.height(), &bgra_surface, 1, &attrib, 1 );
+
+        if ( vaStatus != VA_STATUS_SUCCESS )
+            qWarning() << "vaCreateSurfaces:" << vaErrorStr( vaStatus );
+
+    }
 
     {
         VAImage vaImage;
 
-        auto vaStatus = vaDeriveImage( m_display, m_surfaceId, &vaImage );
+        vaStatus = vaDeriveImage( m_display, bgra_surface, &vaImage );
         if ( vaStatus != VA_STATUS_SUCCESS )
             qWarning() << "vaDeriveImage:" << vaErrorStr( vaStatus );
 
-        uploadNV12( m_display, buffer.constData(), vaImage );
+        uploadBGR( m_display, image.constBits(), vaImage );
 
         vaDestroyImage( m_display, vaImage.image_id );
         if ( vaStatus != VA_STATUS_SUCCESS )
             qWarning() << "vaDestroyImage:" << vaErrorStr( vaStatus );
     }
 
-    m_encoder.initialize( m_display, m_contextId );
-    m_encoder.encodeSurface( m_surfaceId, image.size(), quality, m_targetId );
+    convertToNV12( m_display, image.size(), bgra_surface, m_yuvSurfaceId );
 
-    return targetBufferData();
+    vaDestroySurfaces( m_display, &bgra_surface, 1);
+
+    m_encoder.initialize( m_display, m_contextId );
+    m_encoder.encodeSurface( m_yuvSurfaceId, image.size(), quality, m_jpegBufferId );
+
+    return bufferData( m_jpegBufferId );
 }

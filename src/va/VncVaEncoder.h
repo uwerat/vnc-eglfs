@@ -30,16 +30,16 @@ class VncVaEncoder
     bool openDisplay();
     void closeDisplay();
 
-    QByteArray targetBufferData();
+    QByteArray bufferData( VABufferID ) const;
 
     VADisplay m_display = 0;
     int m_drmFd = -1;
 
     VAConfigID m_configId = VA_INVALID_ID;
-    VASurfaceID m_surfaceId = VA_INVALID_ID;
+    VASurfaceID m_yuvSurfaceId = VA_INVALID_ID;
 
     VAContextID m_contextId = VA_INVALID_ID;
-    VABufferID m_targetId = VA_INVALID_ID;
+    VABufferID m_jpegBufferId = VA_INVALID_ID;
 
     QSize m_size;
     VncVaJpegRenderer m_encoder;
