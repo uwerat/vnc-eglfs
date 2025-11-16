@@ -46,13 +46,14 @@ class RfbSocket
     void sendRect64( const QRect& );
     void sendRect64( const QPoint&, const QSize& );
 
+    void sendBytes( const void*, qint64 count );
+
     QRect readRect64();
 
     qint64 bytesAvailable() const;
     void flush();
 
   private:
-    void sendBytes( const void*, qint64 count );
     qint64 readBytes( void*, qint64 count );
 
     QPointer< QTcpSocket > m_tcpSocket;

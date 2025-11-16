@@ -5,7 +5,7 @@
 
 #include "RfbPixelStreamer.h"
 #include "RfbSocket.h"
-#include "RfbEncoder.h"
+#include "VncFrameGrabber.h"
 
 #include <qimage.h>
 #include <qendian.h>
@@ -173,7 +173,6 @@ namespace
 class RfbPixelStreamer::PrivateData
 {
   public:
-    RfbEncoder encoder;
     PixelFormat format;
 };
 
@@ -200,94 +199,41 @@ void RfbPixelStreamer::receiveClientFormat( RfbSocket* socket )
         qWarning("VNC: can only handle true color clients");
 }
 
-void RfbPixelStreamer::sendImageData(
-    const QImage& image, const QRect& rect, RfbSocket* socket )
+void RfbPixelStreamer::sendBytes( const VncFrame& frame, RfbSocket* socket )
 {
-    auto line = reinterpret_cast< const QRgb* >( image.constBits() );
-    line += rect.y() * rect.width() + rect.x();
-
-    const auto& format = m_data->format;
-
-    if ( format.isDefault() )
+    if ( frame.encoding() == VncFrame::Rgb )
     {
-        for ( int i = 0; i < rect.height(); ++i )
+        auto line = reinterpret_cast< const QRgb* >( frame.bytes() );
+
+        const auto& format = m_data->format;
+
+        if ( format.isDefault() )
         {
-            socket->sendScanLine32( line, rect.width() );
-            line += image.width();
+            for ( int i = 0; i < frame.height(); ++i )
+            {
+                socket->sendScanLine32( line, frame.width() );
+                line += frame.width();
+            }
+        }
+        else
+        {
+            const int count = frame.width() * format.bytesPerPixel();
+            QVarLengthArray< char > buffer( count );
+
+            for ( int i = 0; i < frame.height(); ++i )
+            {
+                format.convertBuffer( line, frame.width(), buffer.data() );
+                socket->sendScanLine8( buffer.constData(), buffer.size() );
+
+                line += frame.width();
+            }
         }
     }
     else
     {
-        const int count = rect.width() * format.bytesPerPixel();
-        QVarLengthArray< char > buffer( count );
-
-        for ( int i = 0; i < rect.height(); ++i )
-        {
-            format.convertBuffer( line, rect.width(), buffer.data() );
-            socket->sendScanLine8( buffer.constData(), buffer.size() );
-
-            line += image.width();
-        }
-    }
-}
-
-void RfbPixelStreamer::sendImageRaw(
-    const QImage& image, const QVector< QRect >& rects, RfbSocket* socket )
-{
-    socket->sendUint8( 0 ); // msg type
-    socket->sendPadding( 1 );
-
-    socket->sendUint16( rects.count() );
-
-    for ( const QRect& rect : rects )
-    {
-        socket->sendRect64( rect );
-
-        socket->sendEncoding32( 0 ); // Raw
-        sendImageData( image, rect, socket );
-    }
-
-    socket->flush();
-}
-
-void RfbPixelStreamer::sendImageJPEG(
-    const QImage& image, const QVector< QRect >& rects, int qualityLevel, RfbSocket* socket )
-{
-    auto& encoder = m_data->encoder;
-
-    // quality: [1:100], level: [0,9]. Higher means better quality + less compression
-    encoder.setQuality( ( qualityLevel + 1 ) * 10 );
-
-    socket->sendUint8( 0 ); // msg type
-    socket->sendPadding( 1 );
-
-    socket->sendUint16( 1 );
-
-    // Tight encoding limits the width of a rectangle
-    const int maxWidth = 2048;
-
-    QVector< QRect > tightRects;
-    tightRects.reserve( image.width() / maxWidth + 1 ); // guessing fullscreen
-
-    for ( const QRect& rect : rects )
-    {
-        for ( int x = rect.x(); x < rect.x() + rect.width(); x += maxWidth )
-        {
-            const int width = qMin( maxWidth, rect.x() + rect.width() - x );
-            tightRects += QRect( x, rect.y(), width, rect.height() );
-        }
-    }
-
-    for ( const QRect& rect : tightRects )
-    {
-        socket->sendRect64( rect );
-
-        socket->sendEncoding32( 7 ); // Tight
         socket->sendUint8( ( 1 << 4 ) | ( 1 << 7 ) );
 
-        encoder.encode( image, rect );
-
-        const quint32 length = encoder.encodedData().size();
+        const quint32 length = frame.byteCount();
 
         // length in compact representation
         if ( length >= 16384 )
@@ -306,10 +252,58 @@ void RfbPixelStreamer::sendImageJPEG(
             socket->sendUint8( length );
         }
 
-        socket->sendByteArray( encoder.encodedData() );
+        socket->sendBytes( frame.bytes(), frame.byteCount() );
+    }
+}
+
+static QVector< QRect > tightRects( const QSize& sz )
+{
+    const int maxWidth = 2048;
+
+    QVector< QRect > rects;
+    rects.reserve( sz.width() / maxWidth + 1 );
+
+    // Tight encoding limits the width of a rectangle
+
+    for ( int x = 0; x < sz.width(); x += maxWidth )
+    {
+        const int width = qMin( maxWidth, sz.width() - x );
+        rects += QRect( x, 0, width, sz.height() );
     }
 
-    encoder.release();
+    return rects;
+}
+
+void RfbPixelStreamer::sendFrame(
+    const VncFrameGrabber* grabber, int qualityLevel, RfbSocket* socket )
+{
+    QVector< QRect > rects;
+
+    const auto encoding = ( qualityLevel > 0 )
+        ? VncFrame::Jpeg : VncFrame::Rgb;
+
+    if ( encoding == VncFrame::Jpeg )
+        rects = ::tightRects( grabber->frameSize() );
+    else
+        rects += QRect( QPoint(), grabber->frameSize() );
+
+    socket->sendUint8( 0 ); // msg type
+    socket->sendPadding( 1 );
+
+    socket->sendUint16( rects.count() );
+
+    for ( const auto& r : rects )
+    {
+        socket->sendRect64( r );
+
+        if ( encoding == VncFrame::Jpeg )
+            socket->sendEncoding32( 7 ); // Tight
+        else
+            socket->sendEncoding32( 0 ); // Raw
+
+        const auto frame = grabber->subFrame( r, encoding, qualityLevel );
+        sendBytes( frame, socket );
+    }
 
     socket->flush();
 }
@@ -327,9 +321,10 @@ void RfbPixelStreamer::sendCursor(
 
     {
         const auto image = cursor.convertToFormat( QImage::Format_RGB32 );
+        const auto frame = VncFrame::fromRawData(
+            VncFrame::Rgb, image.width(), image.height(), image.constBits() );
 
-        const QRect r( 0, 0, image.width(), image.height() );
-        sendImageData( image, r, socket );
+        sendBytes( frame, socket );
     }
 
     {
@@ -338,6 +333,9 @@ void RfbPixelStreamer::sendCursor(
 
         const int width = ( bitmap.width() + 7 ) / 8;
         for ( int i = 0; i < bitmap.height(); ++i )
-            socket->sendScanLine8( reinterpret_cast<const char*>( bitmap.scanLine(i) ), width );
+        {
+            const auto line = reinterpret_cast< const char* >( bitmap.scanLine(i) );
+            socket->sendScanLine8( line, width );
+        }
     }
 }

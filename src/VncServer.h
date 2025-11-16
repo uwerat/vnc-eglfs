@@ -13,6 +13,7 @@
 
 class QWindow;
 class QTcpServer;
+class VncFrameGrabber;
 
 class VncCursor
 {
@@ -29,7 +30,9 @@ class VncServer final : public QObject
     VncServer( int port, QWindow* );
     ~VncServer() override;
 
-    QImage frameBuffer() const;
+    QSize frameSize() const;
+    const VncFrameGrabber* frameGrabber() const;
+
     VncCursor cursor() const;
 
     QWindow* window() const;
@@ -49,10 +52,7 @@ class VncServer final : public QObject
     QPointer< QWindow > m_window;
     QVector< QThread* > m_threads;
 
-    mutable QMutex m_frameBufferMutex;
-    QImage m_frameBuffer;
-    unsigned int m_textureId = 0;
-
+    VncFrameGrabber* m_frameGrabber = nullptr;
     VncCursor m_cursor;
 
     QMetaObject::Connection m_grabConnectionId;

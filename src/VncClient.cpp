@@ -5,6 +5,7 @@
 
 #include "VncClient.h"
 #include "VncServer.h"
+#include "VncFrameGrabber.h"
 
 #include "RfbSocket.h"
 #include "RfbInputEventHandler.h"
@@ -497,13 +498,9 @@ void VncClient::processClientData()
     }
 }
 
-void VncClient::maybeSendFrameBuffer()
+void VncClient::updateSize( const QSize& size )
 {
-    const auto fb = m_data->server->frameBuffer();
-    if ( fb.isNull() )
-        return;
-
-    if ( fb.size() != m_data->frameBufferSize )
+    if ( size != m_data->frameBufferSize )
     {
         if ( m_data->screenResizable )
         {
@@ -512,35 +509,29 @@ void VncClient::maybeSendFrameBuffer()
             socket->sendUint8( 0 ); // msg type
             socket->sendPadding( 1 );
             socket->sendUint16( 1 );
-            socket->sendRect64( QPoint(), fb.size() );
+            socket->sendRect64( QPoint(), size );
             socket->sendEncoding32( -223 );
         }
 
-        m_data->frameBufferSize = fb.size();
+        m_data->frameBufferSize = size;
     }
+}
 
-    if ( !( m_data->frameRequested && m_data->frameDirty ) )
-    {
-        /*
-            Better skip this interval to avoid flooding the client
-            or hogging the network
-         */
+void VncClient::maybeSendFrameBuffer()
+{
+    const auto grabber = m_data->server->frameGrabber();
+    if ( !grabber->isValid() )
         return;
-    }
 
-    m_data->frameRequested = m_data->frameDirty = false;
+    const auto size = m_data->server->frameSize();
+    updateSize( size );
 
-    const QRect rect( 0, 0, fb.width(), fb.height() );
-
-    auto& streamer = m_data->pixelStreamer;
-
-    if ( m_data->tightEnabled && m_data->jpegLevel >= 0 )
+    if ( m_data->frameRequested && m_data->frameDirty )
     {
-        streamer.sendImageJPEG( fb, { rect }, m_data->jpegLevel, &m_data->socket );
-    }
-    else
-    {
-        streamer.sendImageRaw( fb, { rect }, &m_data->socket );
+        m_data->frameRequested = m_data->frameDirty = false;
+
+        const auto quality = m_data->tightEnabled ? m_data->jpegLevel : 0;
+        m_data->pixelStreamer.sendFrame( grabber, quality, &m_data->socket );
     }
 }
 

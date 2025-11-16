@@ -4,6 +4,7 @@
  *****************************************************************************/
 
 #include "VncVaEncoder.h"
+#include "../VncFrame.h"
 
 #include <cstdlib>
 
@@ -106,6 +107,9 @@ VncVaEncoder::~VncVaEncoder()
 
 bool VncVaEncoder::open()
 {
+    if ( m_display )
+        return true;
+
     openDisplay();
 
     VAConfigAttrib attrib[2];
@@ -275,7 +279,10 @@ QByteArray VncVaEncoder::bufferData( VABufferID bufferId ) const
 
     QByteArray data;
     if ( !( segment->status & VA_CODED_BUF_STATUS_SLICE_OVERFLOW_MASK ) )
-        data.append( (const char*)segment->buf, segment->size );
+    {
+        data.resize( segment->size );
+        memcpy( data.data(), segment->buf, segment->size );
+    }
 
     vaStatus = vaUnmapBuffer( m_display, bufferId );
     if ( vaStatus != VA_STATUS_SUCCESS )
@@ -284,11 +291,24 @@ QByteArray VncVaEncoder::bufferData( VABufferID bufferId ) const
     return data;
 }
 
-QByteArray VncVaEncoder::encodeJPG( const QImage& image, const int quality )
+VncFrame VncVaEncoder::encodeJPG( const QImage& image, const int quality )
+{
+    const auto bytes = reinterpret_cast< const uint8_t* >( image.constBits() );
+    return encodeJPG( bytes, image.size(), quality );
+}
+
+VncFrame VncVaEncoder::encodeJPG(
+    const VncFrame& frame, const int quality )
+{
+    return encodeJPG( frame.bytes(), frame.size(), quality );
+}
+
+VncFrame VncVaEncoder::encodeJPG(
+    const uint8_t* bytes, const QSize& size, const int quality )
 {
     VAStatus vaStatus;
 
-    setSize( image.size() );
+    setSize( size );
 
     VASurfaceID bgra_surface;
 
@@ -300,7 +320,7 @@ QByteArray VncVaEncoder::encodeJPG( const QImage& image, const int quality )
         attrib.value.value.i = VA_FOURCC_BGRA; // why not VA_FOURCC_RGBA
 
         vaStatus = vaCreateSurfaces( m_display, VA_RT_FORMAT_RGB32,
-            image.width(), image.height(), &bgra_surface, 1, &attrib, 1 );
+            size.width(), size.height(), &bgra_surface, 1, &attrib, 1 );
 
         if ( vaStatus != VA_STATUS_SUCCESS )
             qWarning() << "vaCreateSurfaces:" << vaErrorStr( vaStatus );
@@ -314,19 +334,21 @@ QByteArray VncVaEncoder::encodeJPG( const QImage& image, const int quality )
         if ( vaStatus != VA_STATUS_SUCCESS )
             qWarning() << "vaDeriveImage:" << vaErrorStr( vaStatus );
 
-        uploadBGR( m_display, image.constBits(), vaImage );
+        uploadBGR( m_display, bytes, vaImage );
 
         vaDestroyImage( m_display, vaImage.image_id );
         if ( vaStatus != VA_STATUS_SUCCESS )
             qWarning() << "vaDestroyImage:" << vaErrorStr( vaStatus );
     }
 
-    convertToNV12( m_display, image.size(), bgra_surface, m_yuvSurfaceId );
+    convertToNV12( m_display, size, bgra_surface, m_yuvSurfaceId );
 
     vaDestroySurfaces( m_display, &bgra_surface, 1);
 
     m_encoder.initialize( m_display, m_contextId );
-    m_encoder.encodeSurface( m_yuvSurfaceId, image.size(), quality, m_jpegBufferId );
+    m_encoder.encodeSurface( m_yuvSurfaceId, size, quality, m_jpegBufferId );
 
-    return bufferData( m_jpegBufferId );
+    const auto encodedBytes = bufferData( m_jpegBufferId );
+    return VncFrame::fromByteArray( VncFrame::Jpeg,
+        size.width(), size.height(), encodedBytes );
 }

@@ -25,6 +25,8 @@ class VncClient final : public QObject
     void markDirty();
     void updateCursor();
 
+    void updateSize( const QSize& );
+
   Q_SIGNALS:
     void disconnected();
 

@@ -5,18 +5,16 @@
 
 #include "VncServer.h"
 #include "VncClient.h"
+#include "VncFrameGrabber.h"
 
 #include <qtcpserver.h>
 #include <qopenglcontext.h>
-#include <qopenglfunctions.h>
 #include <qwindow.h>
 #include <qthread.h>
 #include <qelapsedtimer.h>
 #include <qloggingcategory.h>
 
 #include <qpa/qplatformcursor.h>
-
-#include <QOpenGLExtraFunctions>
 
 Q_LOGGING_CATEGORY( logGrab, "vnceglfs.grab", QtCriticalMsg )
 Q_LOGGING_CATEGORY( logConnection, "vnceglfs.connection" )
@@ -124,6 +122,7 @@ VncServer::VncServer( int port, QWindow* window )
     Q_ASSERT( window && window->inherits( "QQuickWindow" ) );
 
     m_window = window;
+    m_frameGrabber = new VncFrameGrabber( this );
 
     auto tcpServer = new TcpServer( this );
     connect( tcpServer, &TcpServer::connectionRequested, this, &VncServer::addClient );
@@ -136,6 +135,7 @@ VncServer::VncServer( int port, QWindow* window )
 
 VncServer::~VncServer()
 {
+    delete m_frameGrabber;
     m_window = nullptr;
 
     const auto& threads = m_threads; // qAsConst is deprecated in Qt6.7, std::as_const is C++17
@@ -143,12 +143,6 @@ VncServer::~VncServer()
     {
         thread->quit();
         thread->wait( 20 );
-    }
-
-    if ( m_textureId )
-    {
-        GLuint textureId = m_textureId;
-        QOpenGLContext::currentContext()->functions()->glDeleteTextures(1, &textureId);
     }
 }
 
@@ -211,110 +205,9 @@ void VncServer::setTimerInterval( int ms )
     }
 }
 
-static void fillTexture( const unsigned int textureId, const QSize& size )
-{
-    const int width = size.width();
-    const int height = size.height();
-
-    const auto context = QOpenGLContext::currentContext();
-
-    auto& f = *context->functions();
-
-    f.glBindTexture( GL_TEXTURE_2D, textureId );
-    f.glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8,
-        size.width(), size.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    f.glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-    f.glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-
-    GLuint fbo;
-    f.glGenFramebuffers( 1, &fbo );
-    f.glBindFramebuffer( GL_DRAW_FRAMEBUFFER, fbo );
-
-    f.glFramebufferTexture2D( GL_DRAW_FRAMEBUFFER,
-        GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureId, 0 );
-
-    if ( f.glCheckFramebufferStatus( GL_DRAW_FRAMEBUFFER ) != GL_FRAMEBUFFER_COMPLETE )
-        qDebug() << "FBO setup failed!";
-
-    f.glBindFramebuffer( GL_READ_FRAMEBUFFER, 0 );
-    context->extraFunctions()->glReadBuffer( GL_BACK );
-
-    {
-        typedef void ( QOPENGLF_APIENTRYP PFNGLBLITFRAMEBUFFERPROC )(
-            GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLbitfield,GLenum);
-
-        auto blitFBO = (PFNGLBLITFRAMEBUFFERPROC) context->getProcAddress("glBlitFramebuffer");
-
-        blitFBO( 0, 0, width, height,
-            0, height, width, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST ); // copy + flip
-    }
-
-    f.glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-    f.glDeleteFramebuffers( 1, &fbo );
-}
-
-static QImage grabTexture( const unsigned int textureId, const QSize& size )
-{
-    QImage image( size, QImage::Format_RGB32 );
-
-    auto& f = *QOpenGLContext::currentContext()->functions();
-
-    f.glBindTexture(GL_TEXTURE_2D, textureId );
-
-    const GLenum glFormat = GL_BGRA;
-#if 0
-    glGetTexImage( GL_TEXTURE_2D, 0, glFormat, GL_UNSIGNED_BYTE, image.bits() );
-#else
-
-    // Create a temporary framebuffer
-    GLuint fbo = 0;
-    f.glGenFramebuffers(1, &fbo);
-    f.glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-
-    // Attach the texture
-    f.glFramebufferTexture2D(GL_FRAMEBUFFER,
-        GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureId, 0);
-
-    // Check FBO completeness
-    GLenum status = f.glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if ( status != GL_FRAMEBUFFER_COMPLETE )
-        qDebug() << "FBO setup failed!";
-
-    // Read pixels from the framebuffer
-    f.glReadPixels(0, 0, size.width(), size.height(),
-        glFormat, GL_UNSIGNED_BYTE, image.bits() );
-
-    // Clean up framebuffer
-    f.glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    f.glDeleteFramebuffers(1, &fbo);
-#endif
-
-    return image;
-}
-
 void VncServer::updateFrameBuffer()
 {
-    const auto size = m_window->size() * m_window->devicePixelRatio();
-
-    {
-        QMutexLocker locker( &m_frameBufferMutex );
-
-        if ( m_textureId == 0 )
-        {
-            auto context = QOpenGLContext::currentContext();
-            context->extraFunctions()->initializeOpenGLFunctions();
-
-            GLuint textureId;
-            context->functions()->glGenTextures( 1, &textureId );
-            m_textureId = textureId;
-        }
-
-        fillTexture( m_textureId, size );
-    }
-
-    m_frameBuffer = grabTexture( m_textureId, size );
-
-    const QRect rect( 0, 0, size.width(), size.height() );
+    m_frameGrabber->update( frameSize() );
 
     const auto& threads = m_threads;
     for ( auto thread : threads )
@@ -329,12 +222,14 @@ QWindow* VncServer::window() const
     return m_window;
 }
 
-QImage VncServer::frameBuffer() const
+QSize VncServer::frameSize() const
 {
-    QMutexLocker locker( &m_frameBufferMutex );
-    const auto fb = m_frameBuffer;
+    return m_window->size() * m_window->devicePixelRatio();
+}
 
-    return fb;
+const VncFrameGrabber* VncServer::frameGrabber() const
+{
+    return m_frameGrabber;
 }
 
 VncCursor VncServer::cursor() const

@@ -10,8 +10,9 @@
 #include <QSize>
 #include <va/va.h>
 
-class QByteArray;
+class VncFrame;
 class QImage;
+class QByteArray;
 
 class VncVaEncoder
 {
@@ -24,9 +25,12 @@ class VncVaEncoder
 
     void setSize( const QSize& );
 
-    QByteArray encodeJPG( const QImage&, int quality );
+    VncFrame encodeJPG( const QImage&, int quality );
+    VncFrame encodeJPG( const VncFrame&, int quality );
 
   private:
+    VncFrame encodeJPG( const uint8_t* bytes, const QSize&, int quality );
+
     bool openDisplay();
     void closeDisplay();
 

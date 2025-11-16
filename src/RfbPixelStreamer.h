@@ -5,12 +5,13 @@
 
 #pragma once
 
-#include <qvector.h>
 #include <memory>
+#include <qglobal.h>
 
+class VncFrameGrabber;
+class VncFrame;
 class RfbSocket;
 class QImage;
-class QRect;
 class QPoint;
 
 class RfbPixelStreamer
@@ -19,19 +20,14 @@ class RfbPixelStreamer
     RfbPixelStreamer();
     ~RfbPixelStreamer();
 
-    void sendImageRaw( const QImage&,
-        const QVector< QRect >&, RfbSocket* );
-
-    void sendImageJPEG( const QImage&,
-        const QVector< QRect >&, int qualityLevel, RfbSocket* );
-
+    void sendFrame( const VncFrameGrabber*, int quality, RfbSocket* );
     void sendCursor( const QPoint&, const QImage&, RfbSocket* );
 
     void sendServerFormat( RfbSocket* );
     void receiveClientFormat( RfbSocket* );
 
   private:
-    void sendImageData( const QImage&, const QRect&, RfbSocket* );
+    void sendBytes( const VncFrame&, RfbSocket* );
 
   private:
     Q_DISABLE_COPY( RfbPixelStreamer )

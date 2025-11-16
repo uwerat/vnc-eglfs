@@ -8,20 +8,22 @@ cmake_minimum_required(VERSION 3.16)
 list(APPEND HEADERS
     RfbSocket.h
     RfbPixelStreamer.h
-    RfbEncoder.h
     RfbInputEventHandler.h
     VncServer.h
     VncClient.h
+    VncFrame.h
+    VncFrameGrabber.h
     VncNamespace.h
 )
 
 list(APPEND SOURCES
     RfbSocket.cpp
     RfbPixelStreamer.cpp
-    RfbEncoder.cpp
     RfbInputEventHandler.cpp
     VncServer.cpp
     VncClient.cpp
+    VncFrame.cpp
+    VncFrameGrabber.cpp
     VncNamespace.cpp
 )
 
