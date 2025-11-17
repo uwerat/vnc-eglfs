@@ -276,18 +276,7 @@ VncFrameGrabber::VncFrameGrabber( QObject* parent )
 
 VncFrameGrabber::~VncFrameGrabber()
 {
-    if ( m_data->textureId )
-    {
-#if 0
-        // TODO ...
-        QMutexLocker locker( &m_data->mutex );
-
-        delete m_data->textureGrabber;
-
-        auto& f = *m_data->context->functions();
-        f.glDeleteTextures( 1, &m_data->textureId );
-#endif
-    }
+    invalidate();
 }
 
 bool VncFrameGrabber::isValid() const
@@ -383,4 +372,27 @@ VncFrame VncFrameGrabber::subFrame(
     }
 
     return frame;
+}
+
+void VncFrameGrabber::invalidate()
+{
+    QMutexLocker locker( &m_data->mutex );
+
+    delete m_data->textureGrabber;
+    m_data->textureGrabber = nullptr;
+
+    if ( auto textureId = m_data->textureId )
+    {
+        m_data->textureId = 0;
+
+        delete m_data->textureGrabber;
+
+        auto& f = *m_data->context->functions();
+        f.glDeleteTextures( 1, &textureId );
+    }
+
+    m_data->size = QSize();
+
+    m_data->pixels.reset();
+    m_data->jpegTiles.clear();
 }

@@ -156,16 +156,18 @@ void VncServer::addClient( qintptr fd )
     auto thread = new ClientThread( fd, this );
     m_threads += thread;
 
-    if ( m_window && !m_grabConnectionId )
+    if ( m_window && !m_connections[0] )
     {
         /*
-            afterRendering is from the scene graph thread, so we
-            need a Qt::DirectConnection to avoid, that the image is
-            already gone, when being scheduled from a Qt::QQueuedConnection !
+            Qt::DirectConnection: we want to execute the slots on
+            the scene graph thread
          */
 
-        m_grabConnectionId = QObject::connect( m_window, SIGNAL(afterRendering()),
-            this, SLOT(updateFrameBuffer()), Qt::DirectConnection );
+        m_connections[0] = QObject::connect( m_window, SIGNAL(afterRendering()),
+            this, SLOT(updateFrame()), Qt::DirectConnection );
+
+        m_connections[1] = QObject::connect( m_window, SIGNAL(sceneGraphInvalidated()),
+            this, SLOT(invalidateFrame()), Qt::DirectConnection );
 
         QMetaObject::invokeMethod( m_window, "update" );
     }
@@ -182,8 +184,16 @@ void VncServer::removeClient()
     if ( auto thread = qobject_cast< QThread* >( sender() ) )
     {
         m_threads.removeOne( thread );
-        if ( m_threads.isEmpty() && m_grabConnectionId )
-            QObject::disconnect( m_grabConnectionId );
+        if ( m_threads.isEmpty() && m_connections[0] )
+        {
+            if ( m_connections[0] )
+            {
+                QObject::disconnect( m_connections[0] );
+                QObject::disconnect( m_connections[1] );
+            }
+
+            invalidateFrame();
+        }
 
         thread->quit();
         thread->wait( 100 );
@@ -205,7 +215,7 @@ void VncServer::setTimerInterval( int ms )
     }
 }
 
-void VncServer::updateFrameBuffer()
+void VncServer::updateFrame()
 {
     m_frameGrabber->update( frameSize() );
 
@@ -215,6 +225,11 @@ void VncServer::updateFrameBuffer()
         auto clientThread = static_cast< ClientThread* >( thread );
         clientThread->markDirty();
     }
+}
+
+void VncServer::invalidateFrame()
+{
+    m_frameGrabber->invalidate();
 }
 
 QWindow* VncServer::window() const

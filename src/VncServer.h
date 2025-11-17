@@ -41,7 +41,8 @@ class VncServer final : public QObject
     void setTimerInterval( int ms );
 
   private Q_SLOTS:
-    void updateFrameBuffer();
+    void updateFrame();
+    void invalidateFrame();
 
   private:
     void addClient( qintptr fd );
@@ -55,6 +56,6 @@ class VncServer final : public QObject
     VncFrameGrabber* m_frameGrabber = nullptr;
     VncCursor m_cursor;
 
-    QMetaObject::Connection m_grabConnectionId;
+    QMetaObject::Connection m_connections[2];
 };
 

@@ -20,7 +20,9 @@ class VncFrameGrabber : public QObject
     ~VncFrameGrabber();
 
     bool isValid() const;
+
     void update( const QSize& );
+    void invalidate();
 
     QSize frameSize() const;
 
