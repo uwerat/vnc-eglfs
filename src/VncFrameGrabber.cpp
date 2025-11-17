@@ -265,8 +265,8 @@ class VncFrameGrabber::PrivateData
 
     QSize size;
 
-    mutable VncFrame pixels;
-    mutable QHash< int, VncFrame > jpegTiles;
+    mutable VncFrame rgbFrame;
+    mutable QHash< int, VncFrame > jpegFrames;
 };
 
 VncFrameGrabber::VncFrameGrabber( QObject* parent )
@@ -306,8 +306,8 @@ void VncFrameGrabber::update( const QSize& size )
     m_data->size = size;
     fillTexture( m_data->context, m_data->textureId, size );
 
-    m_data->pixels.reset();
-    m_data->jpegTiles.clear();
+    m_data->rgbFrame.reset();
+    m_data->jpegFrames.clear();
 }
 
 VncFrame VncFrameGrabber::frame(
@@ -326,9 +326,9 @@ VncFrame VncFrameGrabber::subFrame(
     if ( format == Pixels || !useVA )
 #endif
     {
-        if ( !m_data->pixels.isValid() )
+        if ( !m_data->rgbFrame.isValid() )
         {
-            m_data->pixels = m_data->textureGrabber->grabFrame(
+            m_data->rgbFrame = m_data->textureGrabber->grabFrame(
                 m_data->textureId, m_data->size );
         }
     }
@@ -336,10 +336,10 @@ VncFrame VncFrameGrabber::subFrame(
 
     if ( encoding == VncFrame::Rgb )
     {
-        return m_data->pixels.subFrame( rect );
+        return m_data->rgbFrame.subFrame( rect );
     }
 
-    auto& frame = m_data->jpegTiles[ qHash( rect, qualityLevel ) ];
+    auto& frame = m_data->jpegFrames[ qHash( rect, qualityLevel ) ];
 
     if ( !frame.isValid() )
     {
@@ -349,7 +349,7 @@ VncFrame VncFrameGrabber::subFrame(
          */
 
         const auto quality = ( qualityLevel + 1 ) * 10;
-        auto subFrame = m_data->pixels.subFrame( rect );
+        auto subFrame = m_data->rgbFrame.subFrame( rect );
 
         if ( useVA )
         {
@@ -385,8 +385,8 @@ void VncFrameGrabber::invalidate()
 
     m_data->size = QSize();
 
-    m_data->pixels.reset();
-    m_data->jpegTiles.clear();
+    m_data->rgbFrame.reset();
+    m_data->jpegFrames.clear();
 }
 
 QReadWriteLock* VncFrameGrabber::lock() const
