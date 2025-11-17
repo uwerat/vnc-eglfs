@@ -13,6 +13,7 @@
 #include <qthread.h>
 #include <qelapsedtimer.h>
 #include <qloggingcategory.h>
+#include <qreadwritelock.h>
 
 #include <qpa/qplatformcursor.h>
 
@@ -217,7 +218,10 @@ void VncServer::setTimerInterval( int ms )
 
 void VncServer::updateFrame()
 {
-    m_frameGrabber->update( frameSize() );
+    QWriteLocker locker( m_frameGrabber->lock() );
+
+    const auto sz = m_window->size() * m_window->devicePixelRatio();
+    m_frameGrabber->update( sz );
 
     const auto& threads = m_threads;
     for ( auto thread : threads )
@@ -229,17 +233,13 @@ void VncServer::updateFrame()
 
 void VncServer::invalidateFrame()
 {
+    QWriteLocker locker( m_frameGrabber->lock() );
     m_frameGrabber->invalidate();
 }
 
 QWindow* VncServer::window() const
 {
     return m_window;
-}
-
-QSize VncServer::frameSize() const
-{
-    return m_window->size() * m_window->devicePixelRatio();
 }
 
 const VncFrameGrabber* VncServer::frameGrabber() const

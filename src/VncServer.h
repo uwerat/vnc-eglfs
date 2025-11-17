@@ -30,7 +30,6 @@ class VncServer final : public QObject
     VncServer( int port, QWindow* );
     ~VncServer() override;
 
-    QSize frameSize() const;
     const VncFrameGrabber* frameGrabber() const;
 
     VncCursor cursor() const;

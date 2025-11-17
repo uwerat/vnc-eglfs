@@ -17,6 +17,7 @@
 #include <qcoreapplication.h>
 #include <qendian.h>
 #include <qmetaobject.h>
+#include <qreadwritelock.h>
 #if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
 #include <qrandom.h>
 #endif
@@ -520,11 +521,13 @@ void VncClient::updateSize( const QSize& size )
 void VncClient::maybeSendFrameBuffer()
 {
     const auto grabber = m_data->server->frameGrabber();
+    
+    QReadLocker locker( grabber->lock() );
+
     if ( !grabber->isValid() )
         return;
 
-    const auto size = m_data->server->frameSize();
-    updateSize( size );
+    updateSize( grabber->frameSize() );
 
     if ( m_data->frameRequested && m_data->frameDirty )
     {

@@ -12,6 +12,7 @@
 
 class QRect;
 class QSize;
+class QReadWriteLock;
 
 class VncFrameGrabber : public QObject
 {
@@ -28,6 +29,8 @@ class VncFrameGrabber : public QObject
 
     VncFrame frame( VncFrame::Encoding, int qualityLevel = 5 ) const;
     VncFrame subFrame( const QRect&, VncFrame::Encoding, int qualityLevel = 5 ) const;
+
+    QReadWriteLock* lock() const;
 
   private:
     class PrivateData;

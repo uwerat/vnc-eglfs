@@ -11,6 +11,7 @@
 
 #include <qrect.h>
 #include <qmutex.h>
+#include <qreadwritelock.h>
 #include <qthread.h>
 
 #include <qopenglcontext.h>
@@ -21,9 +22,9 @@
 #include <qbuffer.h>
 #include <qimagewriter.h>
 
-#include <QWaitCondition>
+#include <qwaitcondition.h>
 #include <QAtomicInt>
-#include <QOffscreenSurface>
+#include <qoffscreensurface.h>
 
 static void fillTexture( QOpenGLContext* context,
     const unsigned int textureId, const QSize& size )
@@ -252,7 +253,7 @@ namespace
 class VncFrameGrabber::PrivateData
 {
   public:
-    QMutex mutex;
+    QReadWriteLock lock;
 
     TextureGrabber* textureGrabber = nullptr;
     QOpenGLContext* context = nullptr;
@@ -281,7 +282,6 @@ VncFrameGrabber::~VncFrameGrabber()
 
 bool VncFrameGrabber::isValid() const
 {
-    QMutexLocker locker( &m_data->mutex );
     return !m_data->size.isEmpty();
 }
 
@@ -303,10 +303,6 @@ void VncFrameGrabber::update( const QSize& size )
             m_data->textureGrabber = new TextureGrabber( m_data->context );
     }
 
-    Q_ASSERT( size == m_data->context->surface()->size() );
-
-    QMutexLocker locker( &m_data->mutex );
-
     m_data->size = size;
     fillTexture( m_data->context, m_data->textureId, size );
 
@@ -324,8 +320,6 @@ VncFrame VncFrameGrabber::frame(
 VncFrame VncFrameGrabber::subFrame(
     const QRect& rect, VncFrame::Encoding encoding, int qualityLevel ) const
 {
-    QMutexLocker locker( &m_data->mutex );
-
     bool useVA = true;
 
 #if 0
@@ -376,8 +370,6 @@ VncFrame VncFrameGrabber::subFrame(
 
 void VncFrameGrabber::invalidate()
 {
-    QMutexLocker locker( &m_data->mutex );
-
     delete m_data->textureGrabber;
     m_data->textureGrabber = nullptr;
 
@@ -395,4 +387,9 @@ void VncFrameGrabber::invalidate()
 
     m_data->pixels.reset();
     m_data->jpegTiles.clear();
+}
+
+QReadWriteLock* VncFrameGrabber::lock() const
+{
+    return &m_data->lock;
 }
