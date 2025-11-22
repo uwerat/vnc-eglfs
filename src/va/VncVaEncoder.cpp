@@ -11,8 +11,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include <QImage>
-#include <QDebug>
+#include <qdebug.h>
 
 #include <va/va.h>
 #include <va/va_vpp.h>
@@ -291,19 +290,12 @@ QByteArray VncVaEncoder::bufferData( VABufferID bufferId ) const
     return data;
 }
 
-VncFrame VncVaEncoder::encodeJPG( const QImage& image, const int quality )
+VncFrame VncVaEncoder::encode( const VncFrame& frame, const int quality )
 {
-    const auto bytes = reinterpret_cast< const uint8_t* >( image.constBits() );
-    return encodeJPG( bytes, image.size(), quality );
+    return encodeBytes( frame.bytes(), frame.size(), quality );
 }
 
-VncFrame VncVaEncoder::encodeJPG(
-    const VncFrame& frame, const int quality )
-{
-    return encodeJPG( frame.bytes(), frame.size(), quality );
-}
-
-VncFrame VncVaEncoder::encodeJPG(
+VncFrame VncVaEncoder::encodeBytes(
     const uint8_t* bytes, const QSize& size, const int quality )
 {
     VAStatus vaStatus;
@@ -349,6 +341,7 @@ VncFrame VncVaEncoder::encodeJPG(
     m_encoder.encodeSurface( m_yuvSurfaceId, size, quality, m_jpegBufferId );
 
     const auto encodedBytes = bufferData( m_jpegBufferId );
+
     return VncFrame::fromByteArray( VncFrame::Jpeg,
         size.width(), size.height(), encodedBytes );
 }

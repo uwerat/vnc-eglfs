@@ -7,11 +7,10 @@
 
 #include "VncVaJpegRenderer.h"
 
-#include <QSize>
+#include <qrect.h>
 #include <va/va.h>
 
 class VncFrame;
-class QImage;
 class QByteArray;
 
 class VncVaEncoder
@@ -25,11 +24,11 @@ class VncVaEncoder
 
     void setSize( const QSize& );
 
-    VncFrame encodeJPG( const QImage&, int quality );
-    VncFrame encodeJPG( const VncFrame&, int quality );
+    VncFrame encode( const VncFrame&, int quality );
+    VncFrame encode( uint textureId, const QSize&, const QRect&, int quality );
 
   private:
-    VncFrame encodeJPG( const uint8_t* bytes, const QSize&, int quality );
+    VncFrame encodeBytes( const uint8_t* bytes, const QSize&, int quality );
 
     bool openDisplay();
     void closeDisplay();
