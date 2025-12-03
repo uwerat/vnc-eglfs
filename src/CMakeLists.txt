@@ -30,12 +30,14 @@ list(APPEND SOURCES
 )
 
 list(APPEND HEADERS
+    VncDmaBuffer.h
     va/VncJpeg.h
     va/VncVaJpegRenderer.h
     va/VncVaEncoder.h
 )
 
 list(APPEND SOURCES
+    VncDmaBuffer.cpp
     va/VncJpeg.cpp
     va/VncVaJpegRenderer.cpp
     va/VncVaEncoder.cpp
