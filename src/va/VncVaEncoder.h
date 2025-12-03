@@ -11,6 +11,7 @@
 #include <va/va.h>
 
 class VncFrame;
+class VncDmaBuffer;
 class QByteArray;
 
 class VncVaEncoder
@@ -25,7 +26,7 @@ class VncVaEncoder
     void setSize( const QSize& );
 
     VncFrame encode( const VncFrame&, int quality );
-    VncFrame encode( uint textureId, const QSize&, const QRect&, int quality );
+    VncFrame encode( VncDmaBuffer&, const QRect&, int quality );
 
   private:
     VncFrame encodeBytes( const uint8_t* bytes, const QSize&, int quality );

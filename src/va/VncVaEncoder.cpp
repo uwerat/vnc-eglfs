@@ -5,6 +5,7 @@
 
 #include "VncVaEncoder.h"
 #include "../VncFrame.h"
+#include "../VncDmaBuffer.h"
 
 #include <cstdlib>
 
@@ -16,6 +17,9 @@
 #include <va/va.h>
 #include <va/va_vpp.h>
 #include <va/va_drm.h>
+#include <va/va_drmcommon.h>
+
+#include <drm/drm_fourcc.h>
 
 static inline int yuvSize( const QSize& size )
 {
@@ -288,6 +292,89 @@ QByteArray VncVaEncoder::bufferData( VABufferID bufferId ) const
         qWarning() << "vaUnmapBuffer:" << vaErrorStr( vaStatus );
 
     return data;
+}
+
+VncFrame VncVaEncoder::encode( VncDmaBuffer& dmaBuf, const QRect& rect, int quality )
+{
+    Q_UNUSED( rect ); // TODO ...
+
+    setSize( dmaBuf.size() );
+
+    VASurfaceAttrib attribs[4] = {};
+
+    auto attr = attribs;
+
+    attr->type = VASurfaceAttribUsageHint;
+    attr->flags = VA_SURFACE_ATTRIB_SETTABLE;
+    attr->value.type = VAGenericValueTypeInteger;
+    attr->value.value.i = VA_SURFACE_ATTRIB_USAGE_HINT_ENCODER;
+    attr++;
+
+    attr->type = VASurfaceAttribPixelFormat;
+    attr->flags = VA_SURFACE_ATTRIB_SETTABLE;
+    attr->value.type = VAGenericValueTypeInteger;
+    attr->value.value.i = VA_FOURCC_NV12;
+    attr++;
+
+    attr->type = VASurfaceAttribMemoryType;
+    attr->flags = VA_SURFACE_ATTRIB_SETTABLE;
+    attr->value.type = VAGenericValueTypeInteger;
+    attr->value.value.i = VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME_2;
+    attr++;
+
+    VADRMPRIMESurfaceDescriptor drmDesc = {};
+    {
+        drmDesc.fourcc = DRM_FORMAT_NV12;
+        drmDesc.width = m_size.width();
+        drmDesc.height = m_size.height();
+
+        drmDesc.num_objects = 1;
+
+        auto& object = drmDesc.objects[0];
+
+        object.fd = dmaBuf.fd();
+        object.drm_format_modifier = dmaBuf.modifier();
+        object.size = dmaBuf.stride() * m_size.height();
+
+        drmDesc.num_layers = 1;
+
+        auto& layer = drmDesc.layers[0];
+
+        layer.drm_format = DRM_FORMAT_NV12;
+        layer.num_planes = 2;
+
+        for ( uint i = 0; i < layer.num_planes; i++ )
+        {
+            layer.object_index[i] = 0;
+            layer.pitch[i] = dmaBuf.stride();
+            layer.offset[i] = dmaBuf.offset();
+        }
+        layer.offset[1] += dmaBuf.stride() * m_size.height();
+    }
+
+    attr->type = VASurfaceAttribExternalBufferDescriptor;
+    attr->flags = VA_SURFACE_ATTRIB_SETTABLE;
+    attr->value.value.p = &drmDesc;
+    attr++;
+
+    const auto count = attr - attribs;
+
+    auto vaStatus = vaCreateSurfaces(
+        m_display, VA_RT_FORMAT_YUV420, m_size.width(), m_size.height(),
+        &m_yuvSurfaceId, 1, attribs, count  );
+
+    if( vaStatus != VA_STATUS_SUCCESS )
+        qWarning() << "vaCreateSurfaces:" << vaErrorStr( vaStatus );
+
+    m_encoder.initialize( m_display, m_contextId );
+    m_encoder.encodeSurface( m_yuvSurfaceId, m_size, quality, m_jpegBufferId );
+
+    const auto encodedBytes = bufferData( m_jpegBufferId );
+
+    return VncFrame::fromByteArray( VncFrame::Jpeg,
+        m_size.width(), m_size.height(), encodedBytes );
+
+    // destroy surface TODO
 }
 
 VncFrame VncVaEncoder::encode( const VncFrame& frame, const int quality )
