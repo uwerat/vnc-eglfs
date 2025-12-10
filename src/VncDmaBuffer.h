@@ -21,6 +21,7 @@ class VncDmaBuffer
     int stride() const;
     int offset() const;
     uint64_t modifier() const;
+    int fourcc() const;
 
     QSize size() const;
 
@@ -37,7 +38,9 @@ class VncDmaBuffer
     int m_fd = -1;
     int m_stride = 0;
     int m_offset = 0;
+
     uint64_t m_modifier = 0;
+    int m_fourcc = 0;
 
     QSize m_size;
 };

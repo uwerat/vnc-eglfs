@@ -29,7 +29,7 @@ VABufferID VncVaJpegRenderer::createBuffer(
     return bufferId;
 }
 
-VncVaJpegRenderer::VncVaJpegRenderer( )
+VncVaJpegRenderer::VncVaJpegRenderer()
 {
 }
 
@@ -72,7 +72,7 @@ void VncVaJpegRenderer::destroyBuffer( Buffer buffer )
 }
 
 static inline void copyTo( const std::vector< uint8_t >& from, uint8_t* to )
-{   
+{
     memcpy( to, from.data(), from.size() );
 }
 
@@ -117,17 +117,17 @@ void VncVaJpegRenderer::updateBuffers(
         p.load_huffman_table[0] = 1; //Load Luma Hufftable
         p.load_huffman_table[1] = 1; //Load Chroma Hufftable for other formats
 
-        p.load_huffman_table[0] = 1; 
+        p.load_huffman_table[0] = 1;
         p.load_huffman_table[1] = 1;
-        
+
         for ( int i = 0; i < 2; i++ )
         {
             auto& table = p.huffman_table[i];
-        
+
             using namespace VncJpeg;
 
             copyTo( dcValues, table.dc_values );
-        
+
             if ( i == 0 )
             {
                 copyTo( acValuesLuminance, table.ac_values );
@@ -170,8 +170,8 @@ void VncVaJpegRenderer::updateBuffers(
             };
 
             m_buffers[PictureParameterBuffer] =
-                 addVABuffer( VAEncPictureParameterBufferType, param );
-        } 
+                addVABuffer( VAEncPictureParameterBufferType, param );
+        }
 
         {
             destroyBuffer( HeaderParameter );

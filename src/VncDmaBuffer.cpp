@@ -155,14 +155,16 @@ bool VncDmaBuffer::setTexture( const QSize& size, unsigned int textureId )
     m_stride = strides[0];
     m_offset = offsets[0];
 
-    int fourcc[4], num_planes[4];
-    EGLuint64KHR modifiers[4];
+    int fourcc[4] = {};
+    int num_planes[4] = {};
+    EGLuint64KHR modifiers[4] = {};
 
     ok = eglExportDMABUFImageQueryMESA( eglDisplay, m_image,
         fourcc, num_planes, modifiers );
     if ( ok )
     {
         m_modifier = modifiers[0];
+        m_fourcc = fourcc[0];
     }
 
     m_size = size;
@@ -228,4 +230,9 @@ int VncDmaBuffer::offset() const
 uint64_t VncDmaBuffer::modifier() const
 {
     return m_modifier;
+}
+
+int VncDmaBuffer::fourcc() const
+{
+    return m_fourcc;
 }

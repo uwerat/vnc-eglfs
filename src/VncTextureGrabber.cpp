@@ -6,6 +6,7 @@
 #include "VncTextureGrabber.h"
 
 #ifdef VNC_VA_ENCODER
+#include "VncDmaBuffer.h"
 #include "va/VncVaEncoder.h"
 #endif
 
@@ -14,11 +15,12 @@
 
 #include <qsurface.h>
 #include <qoffscreensurface.h>
+#include <qelapsedtimer.h>
 
 #include <EGL/egl.h>
 
 #include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h> 
+#include <GLES2/gl2ext.h>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -83,7 +85,7 @@ VncTextureGrabber::~VncTextureGrabber()
     delete m_encoder;
 }
 
-VncFrame VncTextureGrabber::grabFrame( int textureId,
+VncFrame VncTextureGrabber::grabFrame( uint textureId,
     const QSize& size, const QRect& subRect, const int quality )
 {
     QMutexLocker locker( &m_mutex );
@@ -108,7 +110,18 @@ VncFrame VncTextureGrabber::grabFrame( int textureId,
 VncFrame VncTextureGrabber::encodeFrame( const VncFrame& frame, int quality )
 {
     m_encoder->open();
-    return m_encoder->encode( frame, quality );
+    m_encoder->setFrame( frame );
+
+    return m_encoder->encode( QRect(), quality );
+}
+
+VncFrame VncTextureGrabber::encodeFrame(
+    uint textureId, const QSize& size, const QRect& subRect, int quality )
+{
+    m_encoder->open();
+    m_encoder->setFrame( VncDmaBuffer( size, textureId ) );
+
+    return m_encoder->encode( subRect, quality );
 }
 
 void VncTextureGrabber::run()
@@ -133,10 +146,7 @@ void VncTextureGrabber::run()
         return;
     }
 
-#if 0
-    auto& f = *ctx.functions();
-    f.initializeOpenGLFunctions();
-#endif
+    contextGL.functions()->initializeOpenGLFunctions();
 
     m_encoder->open();
 
@@ -169,10 +179,19 @@ void VncTextureGrabber::run()
 
         contextGL.makeCurrent( &offscreen );
 
-        if ( quality <= 0 )
-            frame = grabTexture( textureId, size );
-        else
-            frame = m_encoder->encode( textureId, size, subRect, quality );
+        {
+            QElapsedTimer timer;
+            timer.start();
+
+            if ( quality <= 0 )
+                frame = grabTexture( textureId, size );
+            else
+                frame = encodeFrame( textureId, size, subRect, quality );
+
+#if 0
+            qDebug() << 0 << frame.byteCount() << timer.elapsed();
+#endif
+        }
 
         contextGL.doneCurrent();
 

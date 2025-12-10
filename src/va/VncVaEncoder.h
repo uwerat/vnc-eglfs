@@ -25,8 +25,10 @@ class VncVaEncoder
 
     void setSize( const QSize& );
 
-    VncFrame encode( const VncFrame&, int quality );
-    VncFrame encode( VncDmaBuffer&, const QRect&, int quality );
+    void setFrame( const VncFrame& );
+    void setFrame( const VncDmaBuffer& );
+
+    VncFrame encode( const QRect&, int quality );
 
   private:
     VncFrame encodeBytes( const uint8_t* bytes, const QSize&, int quality );
@@ -39,11 +41,14 @@ class VncVaEncoder
     VADisplay m_display = 0;
     int m_drmFd = -1;
 
-    VAConfigID m_configId = VA_INVALID_ID;
-    VASurfaceID m_yuvSurfaceId = VA_INVALID_ID;
+    struct
+    {
+        VAConfigID config = VA_INVALID_ID;
+        VASurfaceID surface = VA_INVALID_ID;
+        VAContextID context = VA_INVALID_ID;
+        VABufferID buffer = VA_INVALID_ID;
 
-    VAContextID m_contextId = VA_INVALID_ID;
-    VABufferID m_jpegBufferId = VA_INVALID_ID;
+    } m_pass[2];
 
     QSize m_size;
     VncVaJpegRenderer m_encoder;

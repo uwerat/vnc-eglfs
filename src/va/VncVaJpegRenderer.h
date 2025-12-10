@@ -23,9 +23,9 @@ class VncVaJpegRenderer
   private:
     void updateBuffers( const QSize&, int quality, VABufferID );
     void destroyBuffers();
-    
+
     VABufferID createBuffer( VABufferType, unsigned int size, const void* data );
-    
+
     template< typename T >
     VABufferID addVABuffer( VABufferType, const T& );
 
@@ -58,6 +58,6 @@ class VncVaJpegRenderer
 template< typename T >
 inline VABufferID VncVaJpegRenderer::addVABuffer(
     VABufferType bufferType, const T& param )
-{   
+{
     return createBuffer( bufferType, sizeof( T ), &param );
 }

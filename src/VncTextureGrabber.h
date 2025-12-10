@@ -29,24 +29,24 @@ class VncTextureGrabber : public QThread
     VncTextureGrabber( QOpenGLContext*, QObject* parent = nullptr );
     ~VncTextureGrabber() override;
 
-    VncFrame grabFrame( int textureId, const QSize&,
+    VncFrame grabFrame( uint textureId, const QSize&,
         const QRect& subRect, int quality );
-
-#if 1
-    VncFrame encodeFrame( const VncFrame&, int quality );
-#endif
 
   protected:
     void run() override;
 
   private:
+    VncFrame encodeFrame( const VncFrame&, int quality );
+    VncFrame encodeFrame( uint textureId, const QSize&,
+        const QRect& subRect, int quality );
+
     QOpenGLContext* m_context = nullptr;
 
     QMutex m_mutex;
     QWaitCondition m_waitCondition;
     QAtomicInt m_abort {0};
 
-    int m_textureId = 0;
+    uint m_textureId = 0;
 
     QSize m_size;
     QRect m_subRect;

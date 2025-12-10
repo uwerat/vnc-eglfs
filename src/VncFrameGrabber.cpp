@@ -144,27 +144,19 @@ VncFrame VncFrameGrabber::frame(
 VncFrame VncFrameGrabber::subFrame(
     const QRect& subRect, VncFrame::Encoding encoding, int qualityLevel ) const
 {
-    bool useVA = true;
-
-#if 0
-    if ( format == Pixels || !useVA )
-#endif
-    {
-        if ( !m_data->rgbFrame.isValid() )
-        {
-            m_data->rgbFrame = m_data->textureGrabber->grabFrame(
-                m_data->textureId, m_data->size, subRect, 0 );
-        }
-    }
-
     if ( encoding == VncFrame::Rgb )
     {
-        return m_data->rgbFrame.subFrame( subRect );
+        auto& frame = m_data->rgbFrame;
+        if ( !frame.isValid() )
+        {
+            frame = m_data->textureGrabber->grabFrame(
+                m_data->textureId, m_data->size, subRect, 0 );
+        }
+
+        return frame.subFrame( subRect );
     }
 
-    auto& frame = m_data->jpegFrames[ qHash( subRect, qualityLevel ) ];
-
-    if ( !frame.isValid() )
+    if ( encoding == VncFrame::Jpeg )
     {
         /*
             quality: [1:100], level: [0,9].
@@ -172,22 +164,34 @@ VncFrame VncFrameGrabber::subFrame(
          */
 
         const auto quality = ( qualityLevel + 1 ) * 10;
-        auto subFrame = m_data->rgbFrame.subFrame( subRect );
 
-        if ( useVA )
-        {
-            frame = m_data->textureGrabber->encodeFrame( subFrame, quality );
-        }
-        else
-        {
-            const auto bytes = frameToJPEG( subFrame, quality );
+        auto& frame = m_data->jpegFrames[ qHash( subRect, quality ) ];
 
-            frame = VncFrame::fromByteArray( encoding,
-                subFrame.width(), subFrame.height(), bytes );
+        if ( !frame.isValid() )
+        {
+            const bool useVideoAcceleration = true;
+
+            if ( useVideoAcceleration )
+            {
+                frame = m_data->textureGrabber->grabFrame(
+                    m_data->textureId, m_data->size, subRect, quality );
+            }
+            else
+            {
+                auto frm = subFrame( subRect, VncFrame::Rgb, 0 );
+                frm = frm.subFrame( subRect );
+
+                const auto bytes = frameToJPEG( frm, quality );
+
+                frame = VncFrame::fromByteArray( encoding,
+                    frm.width(), frm.height(), bytes );
+            }
         }
+
+        return frame;
     }
 
-    return frame;
+    return VncFrame();
 }
 
 void VncFrameGrabber::invalidate()

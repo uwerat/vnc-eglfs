@@ -521,7 +521,7 @@ void VncClient::updateSize( const QSize& size )
 void VncClient::maybeSendFrameBuffer()
 {
     const auto grabber = m_data->server->frameGrabber();
-    
+
     QReadLocker locker( grabber->lock() );
 
     if ( !grabber->isValid() )
@@ -570,7 +570,7 @@ bool VncClient::handleSetEncodings()
         m_data->jpegLevel = -1;
     }
 
-    const auto bytesAvailable = static_cast<unsigned>( socket->bytesAvailable() );
+    const auto bytesAvailable = static_cast< unsigned >( socket->bytesAvailable() );
     if ( bytesAvailable < count * sizeof( quint32 ) )
         return false;
 
