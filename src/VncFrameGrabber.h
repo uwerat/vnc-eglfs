@@ -8,10 +8,9 @@
 #include "VncFrame.h"
 #include <qobject.h>
 
-#include <memory>
-
 class QRect;
 class QSize;
+class VncTextureGrabber;
 
 class VncFrameGrabber : public QObject
 {
@@ -30,6 +29,9 @@ class VncFrameGrabber : public QObject
     VncFrame subFrame( const QRect&, VncFrame::Encoding, int qualityLevel = 5 ) const;
 
   private:
-    class PrivateData;
-    std::unique_ptr< PrivateData > m_data;
+    VncTextureGrabber* m_textureGrabber = nullptr;
+    QSize m_size;
+
+    class Cache;
+    Cache* m_cache = nullptr;
 };

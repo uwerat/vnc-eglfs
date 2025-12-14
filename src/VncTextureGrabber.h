@@ -17,38 +17,34 @@
 class QOpenGLContext;
 class VncVaEncoder;
 
-/*
-    Downloading the texture does not happen in the scene graph thread
-    and we can't use its context. So we need an extra thread holding
-    a shared context and an offline surface.
- */
-
 class VncTextureGrabber : public QThread
 {
   public:
-    VncTextureGrabber( QOpenGLContext*, QObject* parent = nullptr );
+    VncTextureGrabber( QObject* parent = nullptr );
     ~VncTextureGrabber() override;
 
-    VncFrame grabFrame( uint textureId, const QSize&,
-        const QRect& subRect, int quality );
+    VncFrame grabFrame( const QRect& subRect, int quality );
+
+    void importBackBuffer( const QSize& );
+
+    static bool isSupported( const QOpenGLContext* );
 
   protected:
     void run() override;
 
   private:
-    VncFrame encodeFrame( const VncFrame&, int quality );
-    VncFrame encodeFrame( uint textureId, const QSize&,
-        const QRect& subRect, int quality );
+    VncFrame encodeFrame( const QRect& subRect, int quality );
+    VncFrame readFrame();
 
     QOpenGLContext* m_context = nullptr;
+
+    class FrameBufferObject;
+    FrameBufferObject* m_fbo = nullptr;
 
     QMutex m_mutex;
     QWaitCondition m_waitCondition;
     QAtomicInt m_abort {0};
 
-    uint m_textureId = 0;
-
-    QSize m_size;
     QRect m_subRect;
     int m_quality = 0;
 
@@ -56,4 +52,5 @@ class VncTextureGrabber : public QThread
     VncFrame m_frame;
 
     bool m_done = false;
+    bool m_requested = false;
 };

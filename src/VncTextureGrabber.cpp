@@ -10,63 +10,115 @@
 #include "va/VncVaEncoder.h"
 #endif
 
-#include <qopenglcontext.h>
-#include <QOpenGLExtraFunctions>
-
-#include <qsurface.h>
 #include <qoffscreensurface.h>
-#include <qelapsedtimer.h>
+#include <qopenglcontext.h>
+#include <qopenglextrafunctions.h>
 
-#include <EGL/egl.h>
-
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
-
-#include <fcntl.h>
-#include <unistd.h>
-
-static VncFrame grabTexture( GLuint textureId, const QSize& size )
+class VncTextureGrabber::FrameBufferObject : QOpenGLExtraFunctions
 {
-    VncFrame frame( VncFrame::Rgb, size );
+  public:
+    FrameBufferObject()
+    {
+        initializeOpenGLFunctions();
 
-    glBindTexture( GL_TEXTURE_2D, textureId );
+        glGenTextures( 1, &m_textureId );
 
-    const GLenum glFormat = GL_BGRA;
-#if 0
-    glGetTexImage( GL_TEXTURE_2D, 0, glFormat,
-        GL_UNSIGNED_BYTE, frame.editableBytes() );
-#else
-    // Create a temporary framebuffer
-    GLuint fbo = 0;
-    glGenFramebuffers( 1, &fbo );
-    glBindFramebuffer( GL_FRAMEBUFFER, fbo );
+        glBindTexture( GL_TEXTURE_2D, m_textureId );
+        glGenFramebuffers( 1, &m_fbo );
+        glBindTexture( GL_TEXTURE_2D, 0 );
 
-    // Attach the texture
-    glFramebufferTexture2D( GL_FRAMEBUFFER,
-        GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureId, 0 );
+        glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
+        glFramebufferTexture2D( GL_DRAW_FRAMEBUFFER,
+            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_textureId, 0 );
+        glBindFramebuffer( GL_DRAW_FRAMEBUFFER, 0 );
+    }
 
-    // Check FBO completeness
-    GLenum status = glCheckFramebufferStatus( GL_FRAMEBUFFER );
-    if ( status != GL_FRAMEBUFFER_COMPLETE )
-        qDebug() << "FBO setup failed!";
+    ~FrameBufferObject()
+    {
+        glDeleteFramebuffers( 1, &m_fbo );
+        glDeleteTextures( 1, &m_textureId );
+    }
 
-    // Read pixels from the framebuffer
-    glReadPixels( 0, 0, size.width(), size.height(),
-        glFormat, GL_UNSIGNED_BYTE, frame.editableBytes() );
+    QSize size() const { return m_size; }
+    GLuint textureId() const { return m_textureId; }
 
-    // Clean up framebuffer
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glDeleteFramebuffers(1, &fbo);
-#endif
+    void resize( const QSize& size )
+    {
+        if ( size != m_size )
+        {
+            glBindTexture( GL_TEXTURE_2D, m_textureId );
 
-    glBindTexture( GL_TEXTURE_2D, 0 );
+            glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8,
+                size.width(), size.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
-    return frame;
+            glBindTexture( GL_TEXTURE_2D, 0 );
+
+            m_size = size;
+        }
+    }
+
+    void importBackBuffer()
+    {
+        const int w = m_size.width(); 
+        const int h = m_size.height();
+
+        glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
+
+        glReadBuffer( GL_BACK );
+        glBlitFramebuffer( 0, 0, w, h, 0, h, w, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST ); 
+
+        glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+        glBindTexture( GL_TEXTURE_2D, 0 );
+    }
+
+    void readPixels( uint8_t* data  )
+    {
+        glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
+
+        glFramebufferTexture2D( GL_FRAMEBUFFER,
+            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_textureId, 0 );
+
+        GLenum status = glCheckFramebufferStatus( GL_FRAMEBUFFER );
+        if ( status != GL_FRAMEBUFFER_COMPLETE )
+            qDebug() << "FBO setup failed!";
+
+        glReadPixels( 0, 0, m_size.width(), m_size.height(),
+            GL_BGRA, GL_UNSIGNED_BYTE, data );
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindTexture( GL_TEXTURE_2D, 0 );
+    }
+
+  private:
+    GLuint m_textureId = 0;
+    GLuint m_fbo = 0;
+
+    QSize m_size;
+};
+
+bool VncTextureGrabber::isSupported( const QOpenGLContext* context )
+{
+    /*
+        - glReadBuffer
+            no problem as QOpenGLExtraFunctions does a nop
+            and we run into the default ( = GL_BACK ) then.
+
+        - glBlitFramebuffer
+            we could use glCopyTexImage2D and flip somewhere else.
+     */
+    if ( context->format().majorVersion() < 3 ) 
+    {
+        return context->hasExtension("GL_EXT_framebuffer_blit")
+            || context->hasExtension("GL_NV_framebuffer_blit");
+    }
+
+    return true;
 }
 
-VncTextureGrabber::VncTextureGrabber( QOpenGLContext* context, QObject* parent )
+VncTextureGrabber::VncTextureGrabber( QObject* parent )
     : QThread(parent)
-    , m_context( context )
+    , m_context( QOpenGLContext::currentContext() )
+    , m_fbo( new FrameBufferObject() )
     , m_encoder( new VncVaEncoder() )
 {
     start(); // launch the thread
@@ -76,26 +128,31 @@ VncTextureGrabber::~VncTextureGrabber()
 {
     {
         QMutexLocker locker( &m_mutex );
-        m_abort.storeRelease(true);
+        m_abort.storeRelease( true );
         m_waitCondition.wakeAll();
     }
 
     wait(); // wait for thread to exit
 
+    delete m_fbo;
     delete m_encoder;
 }
 
-VncFrame VncTextureGrabber::grabFrame( uint textureId,
-    const QSize& size, const QRect& subRect, const int quality )
+void VncTextureGrabber::importBackBuffer( const QSize& size )
+{
+    m_fbo->resize( size );
+    m_fbo->importBackBuffer();
+}
+
+VncFrame VncTextureGrabber::grabFrame( const QRect& subRect, const int quality )
 {
     QMutexLocker locker( &m_mutex );
 
-    m_textureId = textureId;
-    m_size = size;
     m_subRect = subRect;
     m_quality = quality;
 
     m_done = false;
+    m_requested = true;
 
     // notify thread
     m_waitCondition.wakeOne();
@@ -107,93 +164,81 @@ VncFrame VncTextureGrabber::grabFrame( uint textureId,
     return m_frame;
 }
 
-VncFrame VncTextureGrabber::encodeFrame( const VncFrame& frame, int quality )
+VncFrame VncTextureGrabber::readFrame()
 {
-    m_encoder->open();
-    m_encoder->setFrame( frame );
+    VncFrame frame( VncFrame::Rgb, m_fbo->size() );
+    m_fbo->readPixels( frame.editableBytes() );
 
-    return m_encoder->encode( QRect(), quality );
+    return frame;
 }
 
-VncFrame VncTextureGrabber::encodeFrame(
-    uint textureId, const QSize& size, const QRect& subRect, int quality )
+VncFrame VncTextureGrabber::encodeFrame( const QRect& subRect, const int quality )
 {
     m_encoder->open();
-    m_encoder->setFrame( VncDmaBuffer( size, textureId ) );
+    m_encoder->setFrame( VncDmaBuffer( m_fbo->size(), m_fbo->textureId() ) );
 
     return m_encoder->encode( subRect, quality );
 }
 
 void VncTextureGrabber::run()
 {
-    QOpenGLContext contextGL;
-    contextGL.setShareContext( m_context );
-    contextGL.setFormat( m_context->format() );
-
-    if (!contextGL.create() )
-    {
-        qWarning("Failed to create worker OpenGL context");
-        return;
-    }
-
+    QSurfaceFormat fmt;
+    fmt.setRenderableType( QSurfaceFormat::OpenGLES );
+    fmt.setVersion(2,0);
+    
+    QOpenGLContext contextES;
+    contextES.setShareContext( m_context );
+    contextES.setFormat( fmt );
+    contextES.create();
+            
     QOffscreenSurface offscreen;
-    offscreen.setFormat( contextGL.format() );
+    offscreen.setFormat(fmt);
     offscreen.create();
 
-    if ( !contextGL.makeCurrent( &offscreen ) )
+    if ( !contextES.makeCurrent( &offscreen ) )
     {
         qWarning("Failed to make worker context current");
         return;
     }
 
-    contextGL.functions()->initializeOpenGLFunctions();
+    auto f = *contextES.functions();
+
+    f.initializeOpenGLFunctions();
 
     m_encoder->open();
 
     while ( !m_abort.loadAcquire() )
     {
-        GLuint textureId;
-        QSize size;
         QRect subRect;
         int quality;
 
         {
             QMutexLocker locker( &m_mutex );
-            if ( m_textureId == 0 )
+            if ( !m_requested )
             {
                 // wait for a job
                 m_waitCondition.wait( &m_mutex );
                 continue;
             }
 
-            textureId = m_textureId;
-            size = m_size;
             subRect = m_subRect;
             quality = m_quality;
 
-            // mark job claimed
-            m_textureId = 0;
+            m_requested = false;
         }
 
         VncFrame frame;
 
-        contextGL.makeCurrent( &offscreen );
+        contextES.makeCurrent( &offscreen );
 
         {
-            QElapsedTimer timer;
-            timer.start();
-
             if ( quality <= 0 )
-                frame = grabTexture( textureId, size );
+                frame = readFrame();
             else
-                frame = encodeFrame( textureId, size, subRect, quality );
-
-#if 0
-            qDebug() << 0 << frame.byteCount() << timer.elapsed();
-#endif
+                frame = encodeFrame( subRect, quality );
         }
 
-        contextGL.doneCurrent();
+        contextES.doneCurrent();
 
         {
             QMutexLocker locker(&m_mutex);

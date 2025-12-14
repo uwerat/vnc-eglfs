@@ -12,54 +12,11 @@
 
 #include <qrect.h>
 #include <qmutex.h>
+#include <qhash.h>
 
-#include <qopenglcontext.h>
-#include <qopenglfunctions.h>
-#include <qopenglextrafunctions.h>
 #include <qimage.h>
 #include <qbuffer.h>
 #include <qimagewriter.h>
-
-static void fillTexture( QOpenGLContext* context,
-    const unsigned int textureId, const QSize& size )
-{
-    const int width = size.width();
-    const int height = size.height();
-
-    auto& f = *context->functions();
-
-    f.glBindTexture( GL_TEXTURE_2D, textureId );
-    f.glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8,
-        size.width(), size.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    f.glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-    f.glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
-
-    GLuint fbo;
-    f.glGenFramebuffers( 1, &fbo );
-    f.glBindFramebuffer( GL_DRAW_FRAMEBUFFER, fbo );
-
-    f.glFramebufferTexture2D( GL_DRAW_FRAMEBUFFER,
-        GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureId, 0 );
-
-    if ( f.glCheckFramebufferStatus( GL_DRAW_FRAMEBUFFER ) != GL_FRAMEBUFFER_COMPLETE )
-        qDebug() << "FBO setup failed!";
-
-    f.glBindFramebuffer( GL_READ_FRAMEBUFFER, 0 );
-    context->extraFunctions()->glReadBuffer( GL_BACK );
-
-    {
-        typedef void ( QOPENGLF_APIENTRYP PFNGLBLITFRAMEBUFFERPROC )(
-            GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLint,GLbitfield,GLenum);
-
-        auto blitFBO = (PFNGLBLITFRAMEBUFFERPROC) context->getProcAddress("glBlitFramebuffer");
-
-        blitFBO( 0, 0, width, height,
-            0, height, width, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST ); // copy + flip
-    }
-
-    f.glBindFramebuffer( GL_FRAMEBUFFER, 0 );
-    f.glDeleteFramebuffers( 1, &fbo );
-}
 
 static QByteArray frameToJPEG( const VncFrame& frame, int quality )
 {
@@ -77,64 +34,56 @@ static QByteArray frameToJPEG( const VncFrame& frame, int quality )
     return data;
 }
 
-class VncFrameGrabber::PrivateData
+class VncFrameGrabber::Cache
 {
   public:
-    VncTextureGrabber* textureGrabber = nullptr;
-    QOpenGLContext* context = nullptr;
-    GLuint textureId = 0;
+    void clear() { m_jpegFrames.clear(); }
 
-    QSize size;
+    VncFrame& frame( int hash = 0 ) { return m_jpegFrames[ hash ]; }
+    VncFrame& frame( const QRect& rect, int quality )
+        { return frame( qHash( rect, quality ) ); }
 
-    mutable VncFrame rgbFrame;
-    mutable QHash< int, VncFrame > jpegFrames;
+  private:
+    QHash< int, VncFrame > m_jpegFrames;
 };
 
 VncFrameGrabber::VncFrameGrabber( QObject* parent )
     : QObject( parent )
-    , m_data( new PrivateData )
 {
+    m_cache = new Cache();
 }
 
 VncFrameGrabber::~VncFrameGrabber()
 {
     invalidate();
+    delete m_cache;
 }
 
 bool VncFrameGrabber::isValid() const
 {
-    return !m_data->size.isEmpty();
+    return !m_size.isEmpty();
 }
 
 QSize VncFrameGrabber::frameSize() const
 {
-    return m_data->size;
+    return m_size;
 }
 
 void VncFrameGrabber::update( const QSize& size )
 {
-    if ( m_data->textureId == 0 )
-    {
-        m_data->context = QOpenGLContext::currentContext();
-        m_data->context->extraFunctions()->initializeOpenGLFunctions();
+    if ( m_textureGrabber == nullptr )
+        m_textureGrabber = new VncTextureGrabber();
 
-        m_data->context->functions()->glGenTextures( 1, &m_data->textureId );
+    m_size = size;
 
-        if ( m_data->textureGrabber == nullptr )
-            m_data->textureGrabber = new VncTextureGrabber( m_data->context );
-    }
-
-    m_data->size = size;
-    fillTexture( m_data->context, m_data->textureId, size );
-
-    m_data->rgbFrame.reset();
-    m_data->jpegFrames.clear();
+    m_textureGrabber->importBackBuffer( size );
+    m_cache->clear();
 }
 
 VncFrame VncFrameGrabber::frame(
     VncFrame::Encoding encoding, int qualityLevel ) const
 {
-    const QRect r( 0, 0, m_data->size.width(), m_data->size.height() );
+    const QRect r( 0, 0, m_size.width(), m_size.height() );
     return subFrame( r, encoding, qualityLevel );
 }
 
@@ -143,12 +92,9 @@ VncFrame VncFrameGrabber::subFrame(
 {
     if ( encoding == VncFrame::Rgb )
     {
-        auto& frame = m_data->rgbFrame;
+        auto& frame = m_cache->frame();
         if ( !frame.isValid() )
-        {
-            frame = m_data->textureGrabber->grabFrame(
-                m_data->textureId, m_data->size, subRect, 0 );
-        }
+            frame = m_textureGrabber->grabFrame( subRect, 0 );
 
         return frame.subFrame( subRect );
     }
@@ -162,7 +108,7 @@ VncFrame VncFrameGrabber::subFrame(
 
         const auto quality = ( qualityLevel + 1 ) * 10;
 
-        auto& frame = m_data->jpegFrames[ qHash( subRect, quality ) ];
+        auto& frame = m_cache->frame( subRect, quality );
 
         if ( !frame.isValid() )
         {
@@ -174,8 +120,7 @@ VncFrame VncFrameGrabber::subFrame(
 
             if ( useVideoAcceleration )
             {
-                frame = m_data->textureGrabber->grabFrame(
-                    m_data->textureId, m_data->size, subRect, quality );
+                frame = m_textureGrabber->grabFrame( subRect, quality );
             }
             else
             {
@@ -197,21 +142,10 @@ VncFrame VncFrameGrabber::subFrame(
 
 void VncFrameGrabber::invalidate()
 {
-    delete m_data->textureGrabber;
-    m_data->textureGrabber = nullptr;
+    delete m_textureGrabber;
+    m_textureGrabber = nullptr;
 
-    if ( auto textureId = m_data->textureId )
-    {
-        m_data->textureId = 0;
+    m_size = QSize();
 
-        delete m_data->textureGrabber;
-
-        auto& f = *m_data->context->functions();
-        f.glDeleteTextures( 1, &textureId );
-    }
-
-    m_data->size = QSize();
-
-    m_data->rgbFrame.reset();
-    m_data->jpegFrames.clear();
+    m_cache->clear();
 }
