@@ -166,7 +166,11 @@ VncFrame VncFrameGrabber::subFrame(
 
         if ( !frame.isValid() )
         {
-            const bool useVideoAcceleration = true;
+#ifdef VNC_VA_ENCODER
+            static bool useVideoAcceleration = VncVaEncoder::isValid();
+#else
+            bool useVideoAcceleration = false;
+#endif
 
             if ( useVideoAcceleration )
             {
