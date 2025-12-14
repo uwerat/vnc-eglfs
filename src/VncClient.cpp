@@ -520,10 +520,9 @@ void VncClient::updateSize( const QSize& size )
 
 void VncClient::maybeSendFrameBuffer()
 {
+    QReadLocker locker( m_data->server->lock() );
+
     const auto grabber = m_data->server->frameGrabber();
-
-    QReadLocker locker( grabber->lock() );
-
     if ( !grabber->isValid() )
         return;
 

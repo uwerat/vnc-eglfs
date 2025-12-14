@@ -12,7 +12,6 @@
 
 #include <qrect.h>
 #include <qmutex.h>
-#include <qreadwritelock.h>
 
 #include <qopenglcontext.h>
 #include <qopenglfunctions.h>
@@ -81,8 +80,6 @@ static QByteArray frameToJPEG( const VncFrame& frame, int quality )
 class VncFrameGrabber::PrivateData
 {
   public:
-    QReadWriteLock lock;
-
     VncTextureGrabber* textureGrabber = nullptr;
     QOpenGLContext* context = nullptr;
     GLuint textureId = 0;
@@ -213,9 +210,4 @@ void VncFrameGrabber::invalidate()
 
     m_data->rgbFrame.reset();
     m_data->jpegFrames.clear();
-}
-
-QReadWriteLock* VncFrameGrabber::lock() const
-{
-    return &m_data->lock;
 }

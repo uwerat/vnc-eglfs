@@ -8,8 +8,8 @@
 #include <qobject.h>
 #include <qimage.h>
 #include <qvector.h>
-#include <qmutex.h>
 #include <qpointer.h>
+#include <qreadwritelock.h>
 
 class QWindow;
 class QTcpServer;
@@ -30,6 +30,7 @@ class VncServer final : public QObject
     VncServer( int port, QWindow* );
     ~VncServer() override;
 
+    QReadWriteLock* lock() const;
     const VncFrameGrabber* frameGrabber() const;
 
     VncCursor cursor() const;
@@ -56,5 +57,7 @@ class VncServer final : public QObject
     VncCursor m_cursor;
 
     QMetaObject::Connection m_connections[2];
+
+    mutable QReadWriteLock m_lock;
 };
 

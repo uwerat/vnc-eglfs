@@ -218,7 +218,7 @@ void VncServer::setTimerInterval( int ms )
 
 void VncServer::updateFrame()
 {
-    QWriteLocker locker( m_frameGrabber->lock() );
+    QWriteLocker locker( &m_lock );
 
     const auto sz = m_window->size() * m_window->devicePixelRatio();
     m_frameGrabber->update( sz );
@@ -233,7 +233,7 @@ void VncServer::updateFrame()
 
 void VncServer::invalidateFrame()
 {
-    QWriteLocker locker( m_frameGrabber->lock() );
+    QWriteLocker locker( &m_lock );
     m_frameGrabber->invalidate();
 }
 
@@ -245,6 +245,11 @@ QWindow* VncServer::window() const
 const VncFrameGrabber* VncServer::frameGrabber() const
 {
     return m_frameGrabber;
+}
+
+QReadWriteLock* VncServer::lock() const
+{
+    return &m_lock;
 }
 
 VncCursor VncServer::cursor() const
