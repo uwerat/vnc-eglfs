@@ -20,6 +20,8 @@ class VncVaEncoder
     VncVaEncoder();
     ~VncVaEncoder();
 
+    static bool isValid();
+
     bool open();
     void close();
 

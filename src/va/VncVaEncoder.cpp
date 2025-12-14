@@ -13,6 +13,7 @@
 #include <fcntl.h>
 
 #include <qdebug.h>
+#include <qvarlengtharray.h>
 
 #include <va/va.h>
 #include <va/va_vpp.h>
@@ -50,6 +51,27 @@ static void uploadBGR( VADisplay vaDisplay,
     vaUnmapBuffer( vaDisplay, vaImage.buf );
 }
 
+static bool hasConfig( VADisplay display, VAProfile profile, VAEntrypoint entry )
+{
+    QVarLengthArray< VAEntrypoint > entries( vaMaxNumEntrypoints( display ) );
+
+    int numEntries = 0;
+
+    const auto vaStatus = vaQueryConfigEntrypoints(
+        display, profile, entries.data(), &numEntries );
+
+    if ( vaStatus == VA_STATUS_SUCCESS )
+    {
+        for ( int i = 0; i < numEntries; i++ )
+        {
+            if ( entries[i] == entry )
+                return true;
+        }
+    }
+
+    return false;
+}
+
 VncVaEncoder::VncVaEncoder()
 {
 }
@@ -57,6 +79,15 @@ VncVaEncoder::VncVaEncoder()
 VncVaEncoder::~VncVaEncoder()
 {
     close();
+}
+
+bool VncVaEncoder::isValid()
+{
+    VncVaEncoder encoder;
+    encoder.openDisplay();
+
+    return hasConfig( encoder.m_display, VAProfileNone, VAEntrypointVideoProc )
+        && hasConfig( encoder.m_display, VAProfileJPEGBaseline, VAEntrypointEncPicture );
 }
 
 bool VncVaEncoder::open()
