@@ -437,7 +437,14 @@ VncFrame VncVaEncoder::encode( const QRect& subRect, int quality )
 
     {
         VAProcPipelineParameterBuffer params = {};
+
         params.surface = m_pass[0].surface;
+
+        params.output_color_standard = VAProcColorStandardBT709;
+        params.output_color_properties.color_range = VA_SOURCE_RANGE_FULL;
+
+        params.rotation_state = VA_ROTATION_NONE; // VA_ROTATION_180
+        params.mirror_state = VA_MIRROR_NONE; // VA_MIRROR_VERTICAL
 
         auto vaStatus = vaCreateBuffer( m_display, m_pass[0].context,
             VAProcPipelineParameterBufferType, sizeof( params ), 1,
