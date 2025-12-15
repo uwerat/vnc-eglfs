@@ -79,26 +79,13 @@ static inline void copyTo( const std::vector< uint8_t >& from, uint8_t* to )
 void VncVaJpegRenderer::updateBuffers(
     const QSize& size, int quality, VABufferID targetId )
 {
-    /*
-        VAQMatrixBufferType and VAHuffmanTableBufferType do not depend on
-        the size/quality need to be defined only once. Actually many drivers
-        have default settings for these tables and it is not necessary to
-        upload them at all.
-
-        In my test environment the driver has only default settings for
-        VAQMatrixBufferType. Not very reliable - so we better upload
-        both buffers.
-
-        Even worse: in my environment I have the options to never upload the
-        matrix buffer or to do it for each run. No idea why.
-     */
-
-#if 1
-    destroyBuffer( MatrixBuffer ); // see above
-#endif
     if ( m_buffers[ MatrixBuffer ] == VA_INVALID_ID )
     {
-        VAQMatrixBufferJPEG p;
+        /*
+           The driver might ( f.e iHd )work without VAQMatrixBufferType
+           using default values. 
+         */
+        VAQMatrixBufferJPEG p = {};
 
         p.load_lum_quantiser_matrix = 1;
         copyTo( VncJpeg::lumaQuantization, p.lum_quantiser_matrix );
@@ -114,14 +101,10 @@ void VncVaJpegRenderer::updateBuffers(
     {
         VAHuffmanTableBufferJPEGBaseline p = {};
 
-        p.load_huffman_table[0] = 1; //Load Luma Hufftable
-        p.load_huffman_table[1] = 1; //Load Chroma Hufftable for other formats
-
-        p.load_huffman_table[0] = 1;
-        p.load_huffman_table[1] = 1;
-
         for ( int i = 0; i < 2; i++ )
         {
+            p.load_huffman_table[i] = 1;
+
             auto& table = p.huffman_table[i];
 
             using namespace VncJpeg;
