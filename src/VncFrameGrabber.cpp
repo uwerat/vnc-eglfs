@@ -124,8 +124,7 @@ VncFrame VncFrameGrabber::subFrame(
             }
             else
             {
-                auto frm = subFrame( subRect, VncFrame::Rgb, 0 );
-                frm = frm.subFrame( subRect );
+                const auto frm = subFrame( subRect, VncFrame::Rgb, 0 );
 
                 const auto bytes = frameToJPEG( frm, quality );
 
