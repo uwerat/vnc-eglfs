@@ -25,15 +25,11 @@ class VncVaEncoder
     bool open();
     void close();
 
-    void setSize( const QSize& );
-
-    void setFrame( const VncFrame& );
-    void setFrame( const VncDmaBuffer& );
-
-    VncFrame encode( const QRect&, int quality );
+    void setFrame( const VncDmaBuffer&, const QRect& );
+    VncFrame encode( int quality );
 
   private:
-    VncFrame encodeBytes( const uint8_t* bytes, const QSize&, int quality );
+    void setSize( const QSize& );
 
     bool openDisplay();
     void closeDisplay();

@@ -283,9 +283,29 @@ void RfbPixelStreamer::sendFrame(
         ? VncFrame::Jpeg : VncFrame::Rgb;
 
     if ( encoding == VncFrame::Jpeg )
+    {
+        /*
+            We prefer to avoid splitting the frame for the moment as it results
+            in resizing the libva surface - an expensive operation. 
+            An efficient implementation should use 2 surfaces - one with 2048
+            and the other one for the reminder. TODO ...
+         */
         rects = ::tightRects( grabber->frameSize() );
-    else
+
+#if 0
+        /*
+            I didn't notice any problems with the tested VNC viewers
+            when ignoring the max. width for Tight encoded rectangles.
+            So let's ignore tiling until see above.
+         */
+        rects.clear();
         rects += QRect( QPoint(), grabber->frameSize() );
+#endif
+    }
+    else
+    {
+        rects += QRect( QPoint(), grabber->frameSize() );
+    }
 
     socket->sendUint8( 0 ); // msg type
     socket->sendPadding( 1 );

@@ -174,10 +174,12 @@ VncFrame VncTextureGrabber::readFrame()
 
 VncFrame VncTextureGrabber::encodeFrame( const QRect& subRect, const int quality )
 {
-    m_encoder->open();
-    m_encoder->setFrame( VncDmaBuffer( m_fbo->size(), m_fbo->textureId() ) );
+    const VncDmaBuffer dma( m_fbo->size(), m_fbo->textureId() );
 
-    return m_encoder->encode( subRect, quality );
+    m_encoder->open();
+    m_encoder->setFrame( dma, subRect );
+
+    return m_encoder->encode( quality );
 }
 
 void VncTextureGrabber::run()
