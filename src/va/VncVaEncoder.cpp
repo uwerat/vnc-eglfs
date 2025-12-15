@@ -433,12 +433,17 @@ void VncVaEncoder::setFrame( const VncFrame& frame )
 
 VncFrame VncVaEncoder::encode( const QRect& subRect, int quality )
 {
-    Q_UNUSED( subRect );
-
     {
+        VARectangle region;
+        region.x =subRect.x();
+        region.y =subRect.y();
+        region.width =subRect.width();
+        region.height =subRect.height();
+
         VAProcPipelineParameterBuffer params = {};
 
         params.surface = m_pass[0].surface;
+        params.surface_region = &region;
 
         params.output_color_standard = VAProcColorStandardBT709;
         params.output_color_properties.color_range = VA_SOURCE_RANGE_FULL;
