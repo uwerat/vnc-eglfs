@@ -5,13 +5,12 @@
 
 #pragma once
 
-#include "VncVaJpegRenderer.h"
-
 #include <qrect.h>
 #include <va/va.h>
 
-class VncFrame;
 class VncDmaBuffer;
+class VncVaConverterPass;
+class VncVaEncoderPass;
 class QByteArray;
 
 class VncVaEncoder
@@ -25,29 +24,17 @@ class VncVaEncoder
     bool open();
     void close();
 
-    void setFrame( const VncDmaBuffer&, const QRect& );
-    VncFrame encode( int quality );
+    QByteArray encode( unsigned int texture, const QSize&, const QRect&, int quality );
 
   private:
-    void setSize( const QSize& );
-
     bool openDisplay();
     void closeDisplay();
-
-    QByteArray bufferData( VABufferID ) const;
 
     VADisplay m_display = 0;
     int m_drmFd = -1;
 
-    struct
-    {
-        VAConfigID config = VA_INVALID_ID;
-        VASurfaceID surface = VA_INVALID_ID;
-        VAContextID context = VA_INVALID_ID;
-        VABufferID buffer = VA_INVALID_ID;
-
-    } m_pass[2];
+    VncVaConverterPass* m_converter = nullptr;
+    VncVaEncoderPass* m_encoder = nullptr;
 
     QSize m_size;
-    VncVaJpegRenderer m_encoder;
 };

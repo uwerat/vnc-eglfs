@@ -3,8 +3,19 @@
  *            SPDX-License-Identifier: BSD-3-Clause
  *****************************************************************************/
 
-#include "VncJpeg.h"
+#include "VncVaEncoderPass.h"
 
+#include <qdebug.h>
+#include <qsize.h>
+
+#include <va/va.h>
+#include <va/va_vpp.h>
+#include <va/va_drm.h>
+#include <va/va_drmcommon.h>
+#include <va/va_enc_jpeg.h>
+
+#include <vector>
+#include <cinttypes>
 #include <QtMinMax>
 #include <cstring>
 
@@ -12,6 +23,7 @@
     All tables and the creation of the header are JPEG standards
     that should be available from libjpeg. TODO ...
  */
+
 namespace
 {
     std::vector< uint8_t > quantizationTable(
@@ -39,10 +51,18 @@ namespace
 
         return table;
     }
+
+    inline void copyTo( const std::vector< uint8_t >& from, uint8_t* to )
+    {
+        memcpy( to, from.data(), from.size() );
+    }
 }
 
 namespace VncJpeg
 {
+
+    using Table = std::vector< uint8_t >;
+
     // Annex K, Table K.1
 
     const Table lumaQuantization = quantizationTable(
@@ -159,10 +179,30 @@ namespace VncJpeg
         0xEA, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8,
         0xF9, 0xFA
     };
-}
 
-namespace VncJpeg
-{
+    class Header
+    {
+      public:
+        Header( int width, int height, int quality );
+
+        const uint8_t* buffer() const { return m_buffer; }
+        int count() const { return m_pos; }
+
+      private:
+        void addMarker( uint16_t );
+        void add2x4( uint8_t, uint8_t );
+        void add8( uint8_t );
+
+        void add16( uint16_t val );
+        void addBytes( const std::vector< uint8_t >& );
+        void addBytes( const char*, size_t );
+
+        void add( uint8_t val, int numBits );
+
+        int m_pos = 0;
+        uint8_t m_buffer[623] = {};
+    };
+
     Header::Header( int width, int height, int quality )
     {
         // ISO/IEC 10918-1
@@ -318,4 +358,192 @@ namespace VncJpeg
         memcpy( m_buffer + m_pos, bytes, count );
         m_pos += count;
     }
+}
+
+VncVaEncoderPass::VncVaEncoderPass( VADisplay display )
+    : VncVaRenderPass( display )
+{
+    createConfig();
+}
+
+VncVaEncoderPass::~VncVaEncoderPass()
+{
+}
+
+void VncVaEncoderPass::createConfig()
+{
+    VAConfigAttrib attrib[2];
+
+    {
+        attrib[0].type = VAConfigAttribRTFormat;
+        attrib[1].type = VAConfigAttribEncJPEG;
+
+        vaGetConfigAttributes( m_display, VAProfileJPEGBaseline,
+            VAEntrypointEncPicture, &attrib[0], 2);
+
+        // RT should be one of below.
+        if ( !( attrib[0].value & VA_RT_FORMAT_YUV420 ) )
+        {
+            /* Did not find the supported RT format */
+            assert(0);
+        }
+
+        VAConfigAttribValEncJPEG val;
+        val.value = attrib[1].value;
+
+        /* Set JPEG profile attribs */
+        val.bits.arithmatic_coding_mode = 0;
+        val.bits.progressive_dct_mode = 0;
+        val.bits.non_interleaved_mode = 1;
+        val.bits.differential_mode = 0;
+
+        attrib[1].value = val.value;
+    }
+
+    auto vaStatus = vaCreateConfig( m_display, VAProfileJPEGBaseline,
+        VAEntrypointEncPicture, attrib, 2, &m_config );
+
+    if ( vaStatus != VA_STATUS_SUCCESS )
+        qWarning() << "vaCreateConfig:" << vaErrorStr( vaStatus );
+}
+
+void VncVaEncoderPass::updateBuffers( const QSize& size, int quality )
+{
+    {
+        /*
+           The driver might ( f.e iHd )work without VAQMatrixBufferType
+           using default values.
+         */
+        VAQMatrixBufferJPEG p = {};
+
+        p.load_lum_quantiser_matrix = 1;
+        copyTo( VncJpeg::lumaQuantization, p.lum_quantiser_matrix );
+
+        p.load_chroma_quantiser_matrix = 1;
+        copyTo( VncJpeg::chromaQuantization, p.chroma_quantiser_matrix );
+
+        setVABuffer( VAQMatrixBufferType, p );
+    }
+
+    {
+        VAHuffmanTableBufferJPEGBaseline p = {};
+
+        for ( int i = 0; i < 2; i++ )
+        {
+            p.load_huffman_table[i] = 1;
+
+            auto& table = p.huffman_table[i];
+
+            using namespace VncJpeg;
+
+            copyTo( dcValues, table.dc_values );
+
+            if ( i == 0 )
+            {
+                copyTo( acValuesLuminance, table.ac_values );
+                copyTo( dcCoefficientsLuminance, table.num_dc_codes );
+                copyTo( acCoefficientsLuminance, table.num_ac_codes );
+            }
+            else
+            {
+                copyTo( acValuesChroma, table.ac_values );
+                copyTo( dcCoefficientsChroma, table.num_dc_codes );
+                copyTo( acCoefficientsChroma, table.num_ac_codes );
+            }
+        }
+
+        setVABuffer( VAHuffmanTableBufferType, p );
+    }
+
+    {
+        constexpr VAEncSliceParameterBufferJPEG p =
+            { 0, 3, { { 1, 0, 0 }, { 2, 1, 1 }, { 3, 1, 1 } }, {} };
+
+        setVABuffer( VAEncSliceParameterBufferType, p );
+    }
+
+    {
+        VAEncPictureParameterBufferJPEG param =
+        {
+            0, uint16_t( size.width() ), uint16_t( size.height() ), m_targetBuffer,
+            { 0, 0, 1, 0, 0 }, 8, 1, 3, { 0, 1, 2 }, { 0, 1, 1 }, uint8_t( quality ), {}
+        };
+
+        setVABuffer( VAEncPictureParameterBufferType, param );
+    }
+
+    {
+        const VncJpeg::Header header( size.width(), size.height(), quality );
+
+        VAEncPackedHeaderParameterBuffer param =
+            { VAEncPackedHeaderRawData, uint32_t(header.count()) * 8, 0, {} };
+
+        setVABuffer( VAEncPackedHeaderParameterBufferType, param );
+
+        setBuffer( VAEncPackedHeaderDataBufferType,
+            header.count(), const_cast< uint8_t* >( header.buffer() ) );
+    }
+}
+
+static inline int yuvSize( const QSize& size )
+{
+    const auto w = size.width();
+    const auto h = size.height();
+
+    return w * h + 2 * ceil( 0.5 * w ) * ceil( 0.5 * h );
+}
+
+void VncVaEncoderPass::createTargetBuffer( const QSize& size )
+{
+    auto vaStatus = vaCreateBuffer( m_display, m_context,
+        VAEncCodedBufferType, yuvSize( size ), 1, nullptr, &m_targetBuffer);
+
+    if ( vaStatus != VA_STATUS_SUCCESS )
+        qWarning() << "vaCreateBuffer:" << vaErrorStr( vaStatus );
+}
+
+void VncVaEncoderPass::destroyTargetBuffer()
+{
+    if ( m_targetBuffer != VA_INVALID_ID )
+    {
+        vaDestroyBuffer( m_display, m_targetBuffer );
+        m_targetBuffer = VA_INVALID_ID;
+    }
+}
+
+void VncVaEncoderPass::createSurface( const QSize& size )
+{
+    VASurfaceAttrib attrib;
+    attrib.type = VASurfaceAttribPixelFormat;
+    attrib.flags = VA_SURFACE_ATTRIB_SETTABLE;
+    attrib.value.type = VAGenericValueTypeInteger;
+    attrib.value.value.i = VA_FOURCC_NV12;
+
+    auto vaStatus = vaCreateSurfaces( m_display, VA_RT_FORMAT_YUV420,
+        size.width(), size.height(), &m_surface, 1, &attrib, 1 );
+
+    if ( vaStatus != VA_STATUS_SUCCESS )
+        qWarning() << "vaCreateSurfaces:" << vaErrorStr( vaStatus );
+}
+
+QByteArray VncVaEncoderPass::encodedData() const
+{
+    VACodedBufferSegment* segment;
+
+    auto vaStatus = vaMapBuffer( m_display, m_targetBuffer, (void**)( &segment ) );
+    if ( vaStatus != VA_STATUS_SUCCESS )
+        qWarning() << "vaMapBuffer:" << vaErrorStr( vaStatus );
+
+    QByteArray data;
+    if ( !( segment->status & VA_CODED_BUF_STATUS_SLICE_OVERFLOW_MASK ) )
+    {
+        data.resize( segment->size );
+        memcpy( data.data(), segment->buf, segment->size );
+    }
+
+    vaStatus = vaUnmapBuffer( m_display, m_targetBuffer );
+    if ( vaStatus != VA_STATUS_SUCCESS )
+        qWarning() << "vaUnmapBuffer:" << vaErrorStr( vaStatus );
+
+    return data;
 }

@@ -4,8 +4,8 @@
  *****************************************************************************/
 
 #include "VncVaEncoder.h"
-#include "../VncFrame.h"
-#include "../VncDmaBuffer.h"
+#include "VncVaConverterPass.h"
+#include "VncVaEncoderPass.h"
 
 #include <cstdlib>
 
@@ -21,14 +21,6 @@
 #include <va/va_drmcommon.h>
 
 #include <drm/drm_fourcc.h>
-
-static inline int yuvSize( const QSize& size )
-{
-    const auto w = size.width();
-    const auto h = size.height();
-
-    return w * h + 2 * ceil( 0.5 * w ) * ceil( 0.5 * h );
-}
 
 static bool hasConfig( VADisplay display, VAProfile profile, VAEntrypoint entry )
 {
@@ -76,137 +68,21 @@ bool VncVaEncoder::open()
 
     openDisplay();
 
-    {
-        auto vaStatus = vaCreateConfig( m_display, VAProfileNone,
-            VAEntrypointVideoProc, nullptr, 0, &m_pass[0].config );
-
-        if ( vaStatus != VA_STATUS_SUCCESS )
-            qWarning() << "vaCreateConfig:" << vaErrorStr( vaStatus );
-    }
-
-    {
-        VAConfigAttrib attrib[2];
-
-        {
-            attrib[0].type = VAConfigAttribRTFormat;
-            attrib[1].type = VAConfigAttribEncJPEG;
-
-            vaGetConfigAttributes( m_display, VAProfileJPEGBaseline,
-                VAEntrypointEncPicture, &attrib[0], 2);
-
-            // RT should be one of below.
-            if ( !( attrib[0].value & VA_RT_FORMAT_YUV420 ) )
-            {
-                /* Did not find the supported RT format */
-                assert(0);
-            }
-
-            VAConfigAttribValEncJPEG val;
-            val.value = attrib[1].value;
-
-            /* Set JPEG profile attribs */
-            val.bits.arithmatic_coding_mode = 0;
-            val.bits.progressive_dct_mode = 0;
-            val.bits.non_interleaved_mode = 1;
-            val.bits.differential_mode = 0;
-
-            attrib[1].value = val.value;
-        }
-
-
-        auto vaStatus = vaCreateConfig( m_display, VAProfileJPEGBaseline,
-            VAEntrypointEncPicture, attrib, 2, &m_pass[1].config );
-
-        if ( vaStatus != VA_STATUS_SUCCESS )
-            qWarning() << "vaCreateConfig:" << vaErrorStr( vaStatus );
-    }
+    m_converter = new VncVaConverterPass( m_display );
+    m_encoder = new VncVaEncoderPass( m_display );
 
     return true;
 }
 
 void VncVaEncoder::close()
 {
-    for ( auto& pass : m_pass )
-    {
-        if ( pass.config != VA_INVALID_ID )
-        {
-            vaDestroyConfig( m_display, pass.config  );
-            pass.config = VA_INVALID_ID;
-        }
-    }
+    delete m_converter;
+    m_converter = nullptr;
+
+    delete m_encoder;
+    m_encoder = nullptr;
 
     closeDisplay();
-}
-
-void VncVaEncoder::setSize( const QSize& size )
-{
-    if ( size == m_size )
-        return;
-
-    m_size = size;
-
-    for ( auto& pass : m_pass )
-    {
-        if ( pass.buffer != VA_INVALID_ID )
-        {
-            vaDestroyBuffer( m_display, pass.buffer );
-            pass.buffer = VA_INVALID_ID;
-        }
-
-        if ( pass.context != VA_INVALID_ID )
-        {
-            vaDestroyContext( m_display, pass.context );
-            pass.context = VA_INVALID_ID;
-        }
-
-        if ( pass.surface != VA_INVALID_ID )
-        {
-            vaDestroySurfaces( m_display, &pass.surface, 1 );
-            pass.surface = VA_INVALID_ID;
-        }
-    }
-
-    if ( m_size.isEmpty() )
-        return;
-
-    {
-        VASurfaceAttrib attrib;
-        attrib.type = VASurfaceAttribPixelFormat;
-        attrib.flags = VA_SURFACE_ATTRIB_SETTABLE;
-        attrib.value.type = VAGenericValueTypeInteger;
-        attrib.value.value.i = VA_FOURCC_NV12;
-
-        auto vaStatus = vaCreateSurfaces(m_display, VA_RT_FORMAT_YUV420,
-            size.width(), size.height(), &m_pass[1].surface, 1, &attrib, 1);
-
-        if ( vaStatus != VA_STATUS_SUCCESS )
-            qWarning() << "vaCreateSurfaces:" << vaErrorStr( vaStatus );
-    }
-
-    {
-        auto vaStatus = vaCreateContext( m_display, m_pass[1].config,
-            size.width(), size.height(), VA_PROGRESSIVE,
-            &m_pass[1].surface, 1, &m_pass[1].context);
-
-        if ( vaStatus != VA_STATUS_SUCCESS )
-            qWarning() << "vaCreateContext:" << vaErrorStr( vaStatus );
-    }
-
-    {
-        auto vaStatus = vaCreateBuffer( m_display, m_pass[1].context,
-            VAEncCodedBufferType, yuvSize( m_size ), 1, nullptr, &m_pass[1].buffer);
-        if ( vaStatus != VA_STATUS_SUCCESS )
-            qWarning() << "vaCreateBuffer:" << vaErrorStr( vaStatus );
-    }
-
-    {
-        auto vaStatus = vaCreateContext( m_display, m_pass[0].config,
-            m_size.width(), m_size.height(),
-            VA_PROGRESSIVE, &m_pass[1].surface, 1, &m_pass[0].context);
-
-        if ( vaStatus != VA_STATUS_SUCCESS )
-            qWarning() << "vaCreateContext:" << vaErrorStr( vaStatus );
-    }
 }
 
 bool VncVaEncoder::openDisplay()
@@ -260,150 +136,33 @@ void VncVaEncoder::closeDisplay()
     }
 }
 
-QByteArray VncVaEncoder::bufferData( VABufferID bufferId ) const
+QByteArray VncVaEncoder::encode( unsigned int texture, const QSize& textureSize,
+    const QRect& subRect, int quality )
 {
-    VACodedBufferSegment* segment;
+    const auto size = subRect.size();
 
-    auto vaStatus = vaMapBuffer( m_display, bufferId, (void**)( &segment ) );
-    if ( vaStatus != VA_STATUS_SUCCESS )
-        qWarning() << "vaMapBuffer:" << vaErrorStr( vaStatus );
-
-    QByteArray data;
-    if ( !( segment->status & VA_CODED_BUF_STATUS_SLICE_OVERFLOW_MASK ) )
+    if ( size != m_size )
     {
-        data.resize( segment->size );
-        memcpy( data.data(), segment->buf, segment->size );
+        m_size = size;
+
+        m_encoder->destroyTargetBuffer();
+        m_encoder->destroyContext();
+
+        m_encoder->createSurface( size );
+        m_encoder->createContext( size, m_encoder->surface() );
+        m_encoder->createTargetBuffer( size );
+
+        m_converter->destroyContext();
+        m_converter->createContext( size, m_encoder->surface() );
     }
 
-    vaStatus = vaUnmapBuffer( m_display, bufferId );
-    if ( vaStatus != VA_STATUS_SUCCESS )
-        qWarning() << "vaUnmapBuffer:" << vaErrorStr( vaStatus );
+    m_converter->createSurface( texture, textureSize, subRect );
+    m_converter->updateBuffers();
 
-    return data;
-}
+    m_converter->run();
 
-void VncVaEncoder::setFrame( const VncDmaBuffer& dma, const QRect& subRect )
-{
-    const auto sz = subRect.size();
+    m_encoder->updateBuffers( m_size, quality );
+    m_encoder->run();
 
-    setSize( sz );
-
-    VASurfaceAttrib attribs[4] = {};
-
-    auto attr = attribs;
-
-    {
-        attr->type = VASurfaceAttribUsageHint;
-        attr->flags = VA_SURFACE_ATTRIB_SETTABLE;
-        attr->value.type = VAGenericValueTypeInteger;
-        attr->value.value.i = VA_SURFACE_ATTRIB_USAGE_HINT_VPP_READ;
-        attr++;
-    }
-
-    {
-        attr->type = VASurfaceAttribPixelFormat;
-        attr->flags = VA_SURFACE_ATTRIB_SETTABLE;
-        attr->value.type = VAGenericValueTypeInteger;
-        attr->value.value.i = VA_FOURCC_BGRA;
-        attr++;
-    }
-
-    {
-        attr->type = VASurfaceAttribMemoryType;
-        attr->flags = VA_SURFACE_ATTRIB_SETTABLE;
-        attr->value.type = VAGenericValueTypeInteger;
-        attr->value.value.i = VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME_2;
-        attr++;
-    }
-
-    {
-
-        VADRMPRIMESurfaceDescriptor desc = {};
-
-        desc.fourcc = VA_FOURCC_RGBA;
-
-        desc.width = sz.width();
-        desc.height = sz.height();
-
-        desc.num_objects = 1;
-
-        desc.objects[0].fd = dma.fd();
-        desc.objects[0].drm_format_modifier = dma.modifier();
-        desc.objects[0].size = dma.stride() * dma.size().height();
-
-        desc.num_layers = 1;
-
-        auto& layer = desc.layers[0];
-        layer.drm_format = DRM_FORMAT_RGBA8888;
-        layer.num_planes = 1;
-        layer.object_index[0] = 0;
-        layer.pitch[0] = dma.stride();
-        layer.offset[0] = dma.offset() + subRect.y() * dma.stride() + subRect.x() * 4;
-
-        attr->type = VASurfaceAttribExternalBufferDescriptor;
-        attr->flags = VA_SURFACE_ATTRIB_SETTABLE;
-        attr->value.value.p = &desc;
-        attr++;
-    }
-
-    const auto count = attr - attribs;
-
-    auto vaStatus = vaCreateSurfaces(
-        m_display, VA_RT_FORMAT_RGB32, sz.width(), sz.height(),
-        &m_pass[0].surface, 1, attribs, count  );
-
-    if( vaStatus != VA_STATUS_SUCCESS )
-        qWarning() << "vaCreateSurfaces:" << vaErrorStr( vaStatus );
-}
-
-VncFrame VncVaEncoder::encode( int quality )
-{
-    {
-        VAProcPipelineParameterBuffer params = {};
-
-        params.surface = m_pass[0].surface;
-
-        params.surface_region = nullptr;
-
-        params.output_color_standard = VAProcColorStandardBT709;
-        params.output_color_properties.color_range = VA_SOURCE_RANGE_FULL;
-
-        params.rotation_state = VA_ROTATION_NONE; // VA_ROTATION_180
-        params.mirror_state = VA_MIRROR_NONE; // VA_MIRROR_VERTICAL
-
-        auto vaStatus = vaCreateBuffer( m_display, m_pass[0].context,
-            VAProcPipelineParameterBufferType, sizeof( params ), 1,
-            &params, &m_pass[0].buffer );
-
-        if ( vaStatus != VA_STATUS_SUCCESS )
-            qWarning() << "vaCreateBuffer:" << vaErrorStr( vaStatus );
-    }
-
-    {
-        auto vaStatus = vaBeginPicture( m_display, m_pass[0].context, m_pass[1].surface );
-        if ( vaStatus != VA_STATUS_SUCCESS )
-            qWarning() << "vaBeginPicture:" << vaErrorStr( vaStatus );
-
-        vaStatus = vaRenderPicture( m_display, m_pass[0].context, &m_pass[0].buffer, 1);
-        if ( vaStatus != VA_STATUS_SUCCESS )
-            qWarning() << "vaBeginPicture:" << vaErrorStr( vaStatus );
-
-        vaStatus = vaEndPicture( m_display, m_pass[0].context );
-        if ( vaStatus != VA_STATUS_SUCCESS )
-            qWarning() << "vaEndPicture:" << vaErrorStr( vaStatus );
-
-        vaStatus = vaSyncSurface( m_display, m_pass[1].surface);
-        if ( vaStatus != VA_STATUS_SUCCESS )
-            qWarning() << "vaBeginPicture:" << vaErrorStr( vaStatus );
-    }
-
-    vaDestroySurfaces( m_display, &m_pass[0].surface, 1);
-
-    m_encoder.initialize( m_display, m_pass[1].context );
-    m_encoder.encodeSurface( m_pass[1].surface, m_size, quality, m_pass[1].buffer );
-
-    const auto encodedBytes = bufferData( m_pass[1].buffer );
-
-    return VncFrame::fromByteArray( VncFrame::Jpeg,
-        m_size.width(), m_size.height(), encodedBytes );
+    return m_encoder->encodedData();
 }

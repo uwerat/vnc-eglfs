@@ -6,7 +6,6 @@
 #include "VncTextureGrabber.h"
 
 #ifdef VNC_VA_ENCODER
-#include "VncDmaBuffer.h"
 #include "va/VncVaEncoder.h"
 #endif
 
@@ -174,12 +173,13 @@ VncFrame VncTextureGrabber::readFrame()
 
 VncFrame VncTextureGrabber::encodeFrame( const QRect& subRect, const int quality )
 {
-    const VncDmaBuffer dma( m_fbo->size(), m_fbo->textureId() );
-
     m_encoder->open();
-    m_encoder->setFrame( dma, subRect );
 
-    return m_encoder->encode( quality );
+    const auto data = m_encoder->encode(
+        m_fbo->textureId(), m_fbo->size(), subRect, quality );
+
+    return VncFrame::fromByteArray( VncFrame::Jpeg,
+        subRect.width(), subRect.height(), data );
 }
 
 void VncTextureGrabber::run()
