@@ -3,7 +3,7 @@
  *            SPDX-License-Identifier: BSD-3-Clause
  *****************************************************************************/
 
-#include "VncVaConverterPass.h"
+#include "VncVaConverter.h"
 
 #include <qdebug.h>
 #include <qrect.h>
@@ -21,15 +21,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstdint>
-
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/ioctl.h>
-
-#include <drm/drm_fourcc.h>
-
-#include <qsize.h>
-#include <qdebug.h>
 
 namespace
 {
@@ -185,33 +176,36 @@ namespace
     }
 }
 
-VncVaConverterPass::VncVaConverterPass( VADisplay display )
-    : VncVaRenderPass( display )
+VncVaConverter::VncVaConverter( VADisplay display )
+    : VncVaRenderer( display )
 {
     Q_ASSERT( DmaBuffer::isSupported() );
-    createConfig();
+
+    setParameterCount( 1 );
+    createConfig( VAProfileNone, VAEntrypointVideoProc );
 }
 
-VncVaConverterPass::~VncVaConverterPass()
+VncVaConverter::~VncVaConverter()
 {
 }
 
-void VncVaConverterPass::createConfig()
+void VncVaConverter::updateContext( const QSize& size, VASurfaceID surface )
 {
-    auto vaStatus = vaCreateConfig( m_display, VAProfileNone,
-        VAEntrypointVideoProc, nullptr, 0, &m_config );
+    m_surfaces[1] = surface;
 
-    if ( vaStatus != VA_STATUS_SUCCESS )
-        qWarning() << "vaCreateConfig:" << vaErrorStr( vaStatus );
+    destroyContext();
+    createContext( size, surface );
 }
 
-void VncVaConverterPass::createSurface(
+void VncVaConverter::setTexture(
     unsigned int texture, const QSize& textureSize, const QRect& subRect )
 {
+    destroySurface( m_surfaces[0] );
+    m_surfaces[0] = VA_INVALID_ID;
+
     DmaBuffer dma( texture );
 
-    if ( m_surface != VA_INVALID_ID )
-        vaDestroySurfaces( m_display, &m_surface, 1 );
+    destroySurface( m_surfaces[0] );
 
     const auto sz = subRect.size();
 
@@ -272,21 +266,14 @@ void VncVaConverterPass::createSurface(
         attr++;
     }
 
-    const auto count = attr - attribs;
-
-    auto vaStatus = vaCreateSurfaces(
-        m_display, VA_RT_FORMAT_RGB32, sz.width(), sz.height(),
-        &m_surface, 1, attribs, count  );
-
-    if( vaStatus != VA_STATUS_SUCCESS )
-        qWarning() << "vaCreateSurfaces:" << vaErrorStr( vaStatus );
+    m_surfaces[0] = createSurface( VA_RT_FORMAT_RGB32, sz, attribs, attr - attribs  );
 }
 
-void VncVaConverterPass::updateBuffers()
+void VncVaConverter::updateParameters()
 {
     VAProcPipelineParameterBuffer params = {};
 
-    params.surface = m_surface;
+    params.surface = m_surfaces[0];
 
     params.surface_region = nullptr;
 
@@ -296,5 +283,10 @@ void VncVaConverterPass::updateBuffers()
     params.rotation_state = VA_ROTATION_NONE; // VA_ROTATION_180
     params.mirror_state = VA_MIRROR_NONE; // VA_MIRROR_VERTICAL
 
-    setBuffer( VAProcPipelineParameterBufferType, sizeof( params ), &params );
+    setParameterBuffer( 0, VAProcPipelineParameterBufferType, params );
+}
+
+void VncVaConverter::run()
+{
+    render( m_surfaces[1] );
 }

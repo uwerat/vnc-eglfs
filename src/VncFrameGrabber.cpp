@@ -7,7 +7,7 @@
 #include "VncTextureGrabber.h"
 
 #ifdef VNC_VA_ENCODER
-#include "va/VncVaEncoder.h"
+#include "va/VncVaApplication.h"
 #endif
 
 #include <qrect.h>
@@ -113,7 +113,7 @@ VncFrame VncFrameGrabber::subFrame(
         if ( !frame.isValid() )
         {
 #ifdef VNC_VA_ENCODER
-            static bool useVideoAcceleration = VncVaEncoder::isValid();
+            static bool useVideoAcceleration = VncVaApplication::isValid();
 #else
             bool useVideoAcceleration = false;
 #endif

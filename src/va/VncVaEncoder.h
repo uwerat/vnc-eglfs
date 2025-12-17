@@ -5,36 +5,44 @@
 
 #pragma once
 
-#include <qrect.h>
-#include <va/va.h>
+#include "VncVaRenderer.h"
+#include <qsize.h>
 
-class VncDmaBuffer;
-class VncVaConverterPass;
-class VncVaEncoderPass;
-class QByteArray;
-
-class VncVaEncoder
+class VncVaEncoder final : public VncVaRenderer
 {
+    using Inherited = VncVaRenderer;
+
   public:
-    VncVaEncoder();
-    ~VncVaEncoder();
+    VncVaEncoder( VADisplay );
+    ~VncVaEncoder() override;
 
-    static bool isValid();
+    void run();
+    QByteArray encodedData() const;
 
-    bool open();
-    void close();
+    void updateContext( const QSize&, VASurfaceID );
 
-    QByteArray encode( unsigned int texture, const QSize&, const QRect&, int quality );
+    void resizeSurface( const QSize& );
+    VASurfaceID surface() const { return m_surface; }
+    QSize surfaceSize() const { return m_size; }
+
+    void updateParameters( int quality );
 
   private:
-    bool openDisplay();
-    void closeDisplay();
+    enum ParameterBuffer
+    {
+        Matrix,
+        Huffman,
+        Slice,
 
-    VADisplay m_display = 0;
-    int m_drmFd = -1;
+        Header,
+        HeaderData,
 
-    VncVaConverterPass* m_converter = nullptr;
-    VncVaEncoderPass* m_encoder = nullptr;
+        Picture,
+
+        NumBuffers
+    };
 
     QSize m_size;
+    VASurfaceID m_surface = VA_INVALID_ID;
+    VABufferID m_renderBuffer = VA_INVALID_ID;
 };

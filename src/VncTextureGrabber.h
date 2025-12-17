@@ -15,7 +15,6 @@
 #include <QAtomicInt>
 
 class QOpenGLContext;
-class VncVaEncoder;
 
 class VncTextureGrabber : public QThread
 {
@@ -33,9 +32,6 @@ class VncTextureGrabber : public QThread
     void run() override;
 
   private:
-    VncFrame encodeFrame( const QRect& subRect, int quality );
-    VncFrame readFrame();
-
     QOpenGLContext* m_context = nullptr;
 
     class FrameBufferObject;
@@ -48,7 +44,6 @@ class VncTextureGrabber : public QThread
     QRect m_subRect;
     int m_quality = 0;
 
-    VncVaEncoder* m_encoder = nullptr;
     VncFrame m_frame;
 
     bool m_done = false;

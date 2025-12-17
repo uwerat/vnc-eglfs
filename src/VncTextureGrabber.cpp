@@ -6,7 +6,7 @@
 #include "VncTextureGrabber.h"
 
 #ifdef VNC_VA_ENCODER
-#include "va/VncVaEncoder.h"
+#include "va/VncVaApplication.h"
 #endif
 
 #include <qoffscreensurface.h>
@@ -118,7 +118,6 @@ VncTextureGrabber::VncTextureGrabber( QObject* parent )
     : QThread(parent)
     , m_context( QOpenGLContext::currentContext() )
     , m_fbo( new FrameBufferObject() )
-    , m_encoder( new VncVaEncoder() )
 {
     start(); // launch the thread
 }
@@ -132,9 +131,7 @@ VncTextureGrabber::~VncTextureGrabber()
     }
 
     wait(); // wait for thread to exit
-
     delete m_fbo;
-    delete m_encoder;
 }
 
 void VncTextureGrabber::importBackBuffer( const QSize& size )
@@ -163,25 +160,6 @@ VncFrame VncTextureGrabber::grabFrame( const QRect& subRect, const int quality )
     return m_frame;
 }
 
-VncFrame VncTextureGrabber::readFrame()
-{
-    VncFrame frame( VncFrame::Rgb, m_fbo->size() );
-    m_fbo->readPixels( frame.editableBytes() );
-
-    return frame;
-}
-
-VncFrame VncTextureGrabber::encodeFrame( const QRect& subRect, const int quality )
-{
-    m_encoder->open();
-
-    const auto data = m_encoder->encode(
-        m_fbo->textureId(), m_fbo->size(), subRect, quality );
-
-    return VncFrame::fromByteArray( VncFrame::Jpeg,
-        subRect.width(), subRect.height(), data );
-}
-
 void VncTextureGrabber::run()
 {
     QSurfaceFormat fmt;
@@ -207,7 +185,7 @@ void VncTextureGrabber::run()
 
     f.initializeOpenGLFunctions();
 
-    m_encoder->open();
+    VncVaApplication encoder;
 
     while ( !m_abort.loadAcquire() )
     {
@@ -233,11 +211,22 @@ void VncTextureGrabber::run()
 
         contextES.makeCurrent( &offscreen );
 
+        if ( quality <= 0 )
         {
-            if ( quality <= 0 )
-                frame = readFrame();
-            else
-                frame = encodeFrame( subRect, quality );
+            VncFrame rgbFrame( VncFrame::Rgb, m_fbo->size() );
+            m_fbo->readPixels( rgbFrame.editableBytes() );
+
+            frame = rgbFrame;
+        }
+        else
+        {
+            encoder.open();
+
+            const auto data = encoder.encode(
+                m_fbo->textureId(), m_fbo->size(), subRect, quality );
+
+            frame = VncFrame::fromByteArray( VncFrame::Jpeg,
+                subRect.width(), subRect.height(), data );
         }
 
         contextES.doneCurrent();
@@ -249,7 +238,4 @@ void VncTextureGrabber::run()
             m_waitCondition.wakeOne();
         }
     }
-
-    m_encoder->close();
 }
-

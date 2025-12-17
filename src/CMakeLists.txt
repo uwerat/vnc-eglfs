@@ -30,17 +30,17 @@ list(APPEND SOURCES
 )
 
 list(APPEND HEADERS
-    va/VncVaRenderPass.h
-    va/VncVaConverterPass.h
-    va/VncVaEncoderPass.h
+    va/VncVaRenderer.h
+    va/VncVaConverter.h
     va/VncVaEncoder.h
+    va/VncVaApplication.h
 )
 
 list(APPEND SOURCES
-    va/VncVaRenderPass.cpp
-    va/VncVaConverterPass.cpp
-    va/VncVaEncoderPass.cpp
+    va/VncVaRenderer.cpp
+    va/VncVaConverter.cpp
     va/VncVaEncoder.cpp
+    va/VncVaApplication.cpp
 )
 
 set(target qvnceglfs)
