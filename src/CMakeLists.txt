@@ -30,14 +30,16 @@ list(APPEND SOURCES
 )
 
 list(APPEND HEADERS
-    va/VncVaRenderer.h
+    va/VncEgl.h
+    va/VncVa.h
     va/VncVaConverter.h
     va/VncVaEncoder.h
     va/VncVaApplication.h
 )
 
 list(APPEND SOURCES
-    va/VncVaRenderer.cpp
+    va/VncEgl.cpp
+    va/VncVa.cpp
     va/VncVaConverter.cpp
     va/VncVaEncoder.cpp
     va/VncVaApplication.cpp

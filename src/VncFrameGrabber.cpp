@@ -112,13 +112,7 @@ VncFrame VncFrameGrabber::subFrame(
 
         if ( !frame.isValid() )
         {
-#ifdef VNC_VA_ENCODER
-            static bool useVideoAcceleration = VncVaApplication::isValid();
-#else
-            bool useVideoAcceleration = false;
-#endif
-
-            if ( useVideoAcceleration )
+            if ( m_textureGrabber->supportsVideoAcceleration() )
             {
                 frame = m_textureGrabber->grabFrame( subRect, quality );
             }

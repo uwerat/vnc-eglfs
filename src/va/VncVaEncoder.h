@@ -5,16 +5,14 @@
 
 #pragma once
 
-#include "VncVaRenderer.h"
 #include <qsize.h>
+#include <va/va.h>
 
-class VncVaEncoder final : public VncVaRenderer
+class VncVaEncoder
 {
-    using Inherited = VncVaRenderer;
-
   public:
-    VncVaEncoder( VADisplay );
-    ~VncVaEncoder() override;
+    VncVaEncoder();
+    ~VncVaEncoder();
 
     void run();
     QByteArray encodedData() const;
@@ -42,7 +40,21 @@ class VncVaEncoder final : public VncVaRenderer
         NumBuffers
     };
 
+    template< typename T > void setParameterBuffer( int index, VABufferType, const T& );
+    void setParameterData( int index, VABufferType, unsigned int size, const void* );
+
+    VAConfigID m_config = VA_INVALID_ID;
+    VAContextID m_context = VA_INVALID_ID;
+
     QSize m_size;
     VASurfaceID m_surface = VA_INVALID_ID;
     VABufferID m_renderBuffer = VA_INVALID_ID;
+    VABufferID m_buffers[ NumBuffers ];
 };
+
+template< typename T >
+inline void VncVaEncoder::setParameterBuffer(
+    int index, VABufferType bufferType, const T& param )
+{
+    setParameterData( index, bufferType, sizeof( T ), &param );
+}

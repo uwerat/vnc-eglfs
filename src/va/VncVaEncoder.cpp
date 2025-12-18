@@ -4,8 +4,8 @@
  *****************************************************************************/
 
 #include "VncVaEncoder.h"
+#include "VncVa.h"
 
-#include <qdebug.h>
 #include <qsize.h>
 
 #include <va/va.h>
@@ -359,30 +359,22 @@ static inline int yuvSize( const QSize& size )
     return w * h + 2 * ceil( 0.5 * w ) * ceil( 0.5 * h );
 }
 
-VncVaEncoder::VncVaEncoder( VADisplay display )
-    : VncVaRenderer( display )
+VncVaEncoder::VncVaEncoder()
 {
-    setParameterCount( NumBuffers );
-
+    std::fill( m_buffers, m_buffers + NumBuffers, VA_INVALID_ID );
     VAConfigAttrib attrib[2];
 
     attrib[0].type = VAConfigAttribRTFormat;
     attrib[1].type = VAConfigAttribEncJPEG;
 
-    vaGetConfigAttributes( display, VAProfileJPEGBaseline,
-        VAEntrypointEncPicture, &attrib[0], 2);
+    vaGetConfigAttributes( VncVa::display(), VAProfileJPEGBaseline,
+        VAEntrypointEncPicture, &attrib[0], 2 );
 
-    // RT should be one of below.
-    if ( !( attrib[0].value & VA_RT_FORMAT_YUV420 ) )
-    {
-        /* Did not find the supported RT format */
-        assert(0);
-    }
+    Q_ASSERT( attrib[0].value & VA_RT_FORMAT_YUV420 );
 
     VAConfigAttribValEncJPEG val;
     val.value = attrib[1].value;
 
-    /* Set JPEG profile attribs */
     val.bits.arithmatic_coding_mode = 0;
     val.bits.progressive_dct_mode = 0;
     val.bits.non_interleaved_mode = 1;
@@ -390,40 +382,41 @@ VncVaEncoder::VncVaEncoder( VADisplay display )
 
     attrib[1].value = val.value;
 
-    Inherited::createConfig(
+    m_config = VncVa::createConfig(
         VAProfileJPEGBaseline, VAEntrypointEncPicture, attrib, 2 );
 }
 
 VncVaEncoder::~VncVaEncoder()
 {
+    for ( auto buffer : m_buffers )
+        VncVa::destroyBuffer( buffer );
+
+    VncVa::destroyConfig( m_config );
 }
 
 void VncVaEncoder::updateParameters( int quality )
 {
     {
-        /*
-           The driver might ( f.e iHd )work without VAQMatrixBufferType
-           using default values.
-         */
-        VAQMatrixBufferJPEG p = {};
+        // driver ( f.e iHd ) might work without - using default values.
+        VAQMatrixBufferJPEG param = {};
 
-        p.load_lum_quantiser_matrix = 1;
-        copyTo( VncJpeg::lumaQuantization, p.lum_quantiser_matrix );
+        param.load_lum_quantiser_matrix = 1;
+        copyTo( VncJpeg::lumaQuantization, param.lum_quantiser_matrix );
 
-        p.load_chroma_quantiser_matrix = 1;
-        copyTo( VncJpeg::chromaQuantization, p.chroma_quantiser_matrix );
+        param.load_chroma_quantiser_matrix = 1;
+        copyTo( VncJpeg::chromaQuantization, param.chroma_quantiser_matrix );
 
-        setParameterBuffer( Matrix, VAQMatrixBufferType, p );
+        setParameterBuffer( Matrix, VAQMatrixBufferType, param );
     }
 
     {
-        VAHuffmanTableBufferJPEGBaseline p = {};
+        VAHuffmanTableBufferJPEGBaseline param = {};
 
         for ( int i = 0; i < 2; i++ )
         {
-            p.load_huffman_table[i] = 1;
+            param.load_huffman_table[i] = 1;
 
-            auto& table = p.huffman_table[i];
+            auto& table = param.huffman_table[i];
 
             using namespace VncJpeg;
 
@@ -443,14 +436,14 @@ void VncVaEncoder::updateParameters( int quality )
             }
         }
 
-        setParameterBuffer( Huffman, VAHuffmanTableBufferType, p );
+        setParameterBuffer( Huffman, VAHuffmanTableBufferType, param );
     }
 
     {
-        constexpr VAEncSliceParameterBufferJPEG p =
+        constexpr VAEncSliceParameterBufferJPEG param =
             { 0, 3, { { 1, 0, 0 }, { 2, 1, 1 }, { 3, 1, 1 } }, {} };
 
-        setParameterBuffer( Slice, VAEncSliceParameterBufferType, p );
+        setParameterBuffer( Slice, VAEncSliceParameterBufferType, param );
     }
 
     {
@@ -461,7 +454,7 @@ void VncVaEncoder::updateParameters( int quality )
 
         setParameterBuffer( Header, VAEncPackedHeaderParameterBufferType, param );
 
-        setParameterBuffer( HeaderData, VAEncPackedHeaderDataBufferType,
+        setParameterData( HeaderData, VAEncPackedHeaderDataBufferType,
             header.count(), const_cast< uint8_t* >( header.buffer() ) );
     }
 
@@ -478,7 +471,7 @@ void VncVaEncoder::updateParameters( int quality )
 
 void VncVaEncoder::resizeSurface( const QSize& size )
 {
-    destroySurface( m_surface );
+    VncVa::destroySurface( m_surface );
 
     m_size = size;
 
@@ -488,24 +481,34 @@ void VncVaEncoder::resizeSurface( const QSize& size )
     attrib.value.type = VAGenericValueTypeInteger;
     attrib.value.value.i = VA_FOURCC_NV12;
 
-    m_surface = createSurface( VA_RT_FORMAT_YUV420, size, &attrib, 1 );
+    m_surface = VncVa::createSurface( VA_RT_FORMAT_YUV420, size, &attrib, 1 );
 }
 
 void VncVaEncoder::updateContext( const QSize& size, VASurfaceID surface )
 {
-    destroyBuffer( m_renderBuffer );
-    destroyContext();
+    VncVa::destroyBuffer( m_renderBuffer );
 
-    createContext( size, surface );
-    m_renderBuffer = createBuffer( VAEncCodedBufferType, yuvSize( size ) );
+    VncVa::destroyContext( m_context );
+    m_context = VncVa::createContext( m_config, size, surface );
+
+    //m_renderBuffer = createBuffer0( VAEncCodedBufferType, yuvSize( size ) );
+    m_renderBuffer = VncVa::createBuffer( m_context,
+        VAEncCodedBufferType, yuvSize( size ) );
+}
+
+void VncVaEncoder::setParameterData( int index,
+    VABufferType bufferType, unsigned int size, const void* data )
+{
+    VncVa::destroyBuffer( m_buffers[index] );
+    m_buffers[index] = VncVa::createBuffer( m_context, bufferType, size, data );
 }
 
 QByteArray VncVaEncoder::encodedData() const
 {
-    return bufferData( m_renderBuffer );
+    return VncVa::bufferData( m_renderBuffer );
 }
 
 void VncVaEncoder::run()
 {
-    render( m_surface );
+    VncVa::renderPicture( m_context, m_buffers, NumBuffers, m_surface );
 }

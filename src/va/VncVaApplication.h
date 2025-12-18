@@ -21,15 +21,12 @@ class VncVaApplication
 
     static bool isValid();
 
-    bool open();
+    void open();
     void close();
 
     QByteArray encode( unsigned int texture, const QSize&, const QRect&, int quality );
 
   private:
-    bool openDisplay();
-    void closeDisplay();
-
     VADisplay m_display = 0;
     int m_drmFd = -1;
 

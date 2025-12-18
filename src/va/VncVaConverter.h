@@ -5,17 +5,16 @@
 
 #pragma once
 
-#include "VncVaRenderer.h"
+#include <va/va.h>
 
 class QRect;
+class QSize;
 
-class VncVaConverter final : public VncVaRenderer
+class VncVaConverter
 {
-    using Inherited = VncVaRenderer;
-
   public:
-    VncVaConverter( VADisplay );
-    ~VncVaConverter() override;
+    VncVaConverter();
+    ~VncVaConverter();
 
     void run();
     void updateContext( const QSize&, VASurfaceID );
@@ -24,5 +23,9 @@ class VncVaConverter final : public VncVaRenderer
     void updateParameters();
 
   private:
-    VASurfaceID m_surfaces[2] = { VA_INVALID_ID };
+    VAConfigID m_config = VA_INVALID_ID;
+    VAContextID m_context = VA_INVALID_ID;
+
+    VASurfaceID m_surfaces[2] = { VA_INVALID_ID, VA_INVALID_ID };
+    VABufferID m_pipelineBuffer = VA_INVALID_ID;
 };

@@ -119,6 +119,7 @@ VncTextureGrabber::VncTextureGrabber( QObject* parent )
     , m_context( QOpenGLContext::currentContext() )
     , m_fbo( new FrameBufferObject() )
 {
+    m_videoAcceleration = VncVaApplication::isValid();
     start(); // launch the thread
 }
 
@@ -182,7 +183,6 @@ void VncTextureGrabber::run()
     }
 
     auto f = *contextES.functions();
-
     f.initializeOpenGLFunctions();
 
     VncVaApplication encoder;

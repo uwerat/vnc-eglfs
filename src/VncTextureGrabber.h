@@ -22,6 +22,7 @@ class VncTextureGrabber : public QThread
     VncTextureGrabber( QObject* parent = nullptr );
     ~VncTextureGrabber() override;
 
+    bool supportsVideoAcceleration() const;
     VncFrame grabFrame( const QRect& subRect, int quality );
 
     void importBackBuffer( const QSize& );
@@ -48,4 +49,11 @@ class VncTextureGrabber : public QThread
 
     bool m_done = false;
     bool m_requested = false;
+
+    bool m_videoAcceleration = false;
 };
+
+inline bool VncTextureGrabber::supportsVideoAcceleration() const
+{
+    return m_videoAcceleration;
+}
