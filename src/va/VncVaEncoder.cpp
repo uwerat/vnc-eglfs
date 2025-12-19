@@ -362,28 +362,7 @@ static inline int yuvSize( const QSize& size )
 VncVaEncoder::VncVaEncoder()
 {
     std::fill( m_buffers, m_buffers + NumBuffers, VA_INVALID_ID );
-    VAConfigAttrib attrib[2];
-
-    attrib[0].type = VAConfigAttribRTFormat;
-    attrib[1].type = VAConfigAttribEncJPEG;
-
-    vaGetConfigAttributes( VncVa::display(), VAProfileJPEGBaseline,
-        VAEntrypointEncPicture, &attrib[0], 2 );
-
-    Q_ASSERT( attrib[0].value & VA_RT_FORMAT_YUV420 );
-
-    VAConfigAttribValEncJPEG val;
-    val.value = attrib[1].value;
-
-    val.bits.arithmatic_coding_mode = 0;
-    val.bits.progressive_dct_mode = 0;
-    val.bits.non_interleaved_mode = 1;
-    val.bits.differential_mode = 0;
-
-    attrib[1].value = val.value;
-
-    m_config = VncVa::createConfig(
-        VAProfileJPEGBaseline, VAEntrypointEncPicture, attrib, 2 );
+    m_config = VncVa::createConfig( VAProfileJPEGBaseline, VAEntrypointEncPicture );
 }
 
 VncVaEncoder::~VncVaEncoder()
@@ -394,7 +373,7 @@ VncVaEncoder::~VncVaEncoder()
     VncVa::destroyConfig( m_config );
 }
 
-void VncVaEncoder::updateParameters( int quality )
+void VncVaEncoder::updateParameters( const QSize& size, int quality )
 {
     {
         // driver ( f.e iHd ) might work without - using default values.
@@ -447,7 +426,7 @@ void VncVaEncoder::updateParameters( int quality )
     }
 
     {
-        const VncJpeg::Header header( m_size.width(), m_size.height(), quality );
+        const VncJpeg::Header header( size.width(), size.height(), quality );
 
         VAEncPackedHeaderParameterBuffer param =
             { VAEncPackedHeaderRawData, uint32_t(header.count()) * 8, 0, {} };
@@ -461,7 +440,7 @@ void VncVaEncoder::updateParameters( int quality )
     {
         VAEncPictureParameterBufferJPEG param =
         {
-            0, uint16_t( m_size.width() ), uint16_t( m_size.height() ), m_renderBuffer,
+            0, uint16_t( size.width() ), uint16_t( size.height() ), m_renderBuffer,
             { 0, 0, 1, 0, 0 }, 8, 1, 3, { 0, 1, 2 }, { 0, 1, 1 }, uint8_t( quality ), {}
         };
 
@@ -469,29 +448,13 @@ void VncVaEncoder::updateParameters( int quality )
     }
 }
 
-void VncVaEncoder::resizeSurface( const QSize& size )
-{
-    VncVa::destroySurface( m_surface );
-
-    m_size = size;
-
-    VASurfaceAttrib attrib;
-    attrib.type = VASurfaceAttribPixelFormat;
-    attrib.flags = VA_SURFACE_ATTRIB_SETTABLE;
-    attrib.value.type = VAGenericValueTypeInteger;
-    attrib.value.value.i = VA_FOURCC_NV12;
-
-    m_surface = VncVa::createSurface( VA_RT_FORMAT_YUV420, size, &attrib, 1 );
-}
-
-void VncVaEncoder::updateContext( const QSize& size, VASurfaceID surface )
+void VncVaEncoder::updateContext( const QSize& size )
 {
     VncVa::destroyBuffer( m_renderBuffer );
 
     VncVa::destroyContext( m_context );
-    m_context = VncVa::createContext( m_config, size, surface );
+    m_context = VncVa::createContext( m_config, size );
 
-    //m_renderBuffer = createBuffer0( VAEncCodedBufferType, yuvSize( size ) );
     m_renderBuffer = VncVa::createBuffer( m_context,
         VAEncCodedBufferType, yuvSize( size ) );
 }
@@ -508,7 +471,7 @@ QByteArray VncVaEncoder::encodedData() const
     return VncVa::bufferData( m_renderBuffer );
 }
 
-void VncVaEncoder::run()
+void VncVaEncoder::render( VASurfaceID surface )
 {
-    VncVa::renderPicture( m_context, m_buffers, NumBuffers, m_surface );
+    VncVa::renderPicture( m_context, m_buffers, NumBuffers, surface );
 }

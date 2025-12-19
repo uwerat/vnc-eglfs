@@ -185,7 +185,7 @@ void VncTextureGrabber::run()
     auto f = *contextES.functions();
     f.initializeOpenGLFunctions();
 
-    VncVaApplication encoder;
+    VncVaApplication encoder( m_fbo->textureId() );
 
     while ( !m_abort.loadAcquire() )
     {
@@ -220,10 +220,7 @@ void VncTextureGrabber::run()
         }
         else
         {
-            encoder.open();
-
-            const auto data = encoder.encode(
-                m_fbo->textureId(), m_fbo->size(), subRect, quality );
+            const auto data = encoder.encode( m_fbo->size(), subRect, quality );
 
             frame = VncFrame::fromByteArray( VncFrame::Jpeg,
                 subRect.width(), subRect.height(), data );

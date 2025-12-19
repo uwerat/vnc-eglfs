@@ -21,25 +21,6 @@
 #include <unistd.h>
 #include <cstdint>
 
-namespace
-{
-    class DmaBuffer : public VncEgl::DmaBuffer
-    {
-      public:
-        DmaBuffer( unsigned int texture )
-        {
-            auto that = static_cast< VncEgl::DmaBuffer* >( this );
-            *that = VncEgl::dmaBuffer( texture );
-        }
-
-        ~DmaBuffer()
-        {
-            if ( fd >= 0 )
-                close( fd );
-        }
-    };
-}
-
 VncVaConverter::VncVaConverter()
 {
     m_config = VncVa::createConfig( VAProfileNone, VAEntrypointVideoProc );
@@ -48,23 +29,21 @@ VncVaConverter::VncVaConverter()
 VncVaConverter::~VncVaConverter()
 {
     VncVa::destroyBuffer( m_pipelineBuffer );
+    VncVa::destroySurface( m_textureSurface );
     VncVa::destroyConfig( m_config );
 }
 
-void VncVaConverter::updateContext( const QSize& size, VASurfaceID surface )
+void VncVaConverter::updateContext( const QSize& size )
 {
-    m_surfaces[1] = surface;
     VncVa::destroyContext( m_context );
-    m_context = VncVa::createContext( m_config, size, surface );
+    m_context = VncVa::createContext( m_config, size );
 }
 
-void VncVaConverter::setTexture(
-    unsigned int texture, const QSize& textureSize, const QRect& subRect )
+void VncVaConverter::setSource( VncEgl::DmaBuffer& dma,
+    const QSize& sourceSize, const QRect& subRect )
 {
-    VncVa::destroySurface( m_surfaces[0] );
-    m_surfaces[0] = VA_INVALID_ID;
-
-    DmaBuffer dma( texture );
+    VncVa::destroySurface( m_textureSurface );
+    m_textureSurface = VA_INVALID_ID;
 
     const auto sz = subRect.size();
 
@@ -88,6 +67,7 @@ void VncVaConverter::setTexture(
         attr++;
     }
 
+#if 1
     {
         attr->type = VASurfaceAttribMemoryType;
         attr->flags = VA_SURFACE_ATTRIB_SETTABLE;
@@ -95,6 +75,7 @@ void VncVaConverter::setTexture(
         attr->value.value.i = VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME_2;
         attr++;
     }
+#endif
     {
 
         VADRMPRIMESurfaceDescriptor desc = {};
@@ -108,7 +89,7 @@ void VncVaConverter::setTexture(
 
         desc.objects[0].fd = dma.fd;
         desc.objects[0].drm_format_modifier = dma.modifier;
-        desc.objects[0].size = dma.stride * textureSize.height();
+        desc.objects[0].size = dma.stride * sourceSize.height();
 
         desc.num_layers = 1;
 
@@ -125,15 +106,17 @@ void VncVaConverter::setTexture(
         attr++;
     }
 
-    m_surfaces[0] = VncVa::createSurface(
+    m_textureSurface = VncVa::createSurface(
         VA_RT_FORMAT_RGB32, sz, attribs, attr - attribs  );
+
+    updatePipeline( m_textureSurface );
 }
 
-void VncVaConverter::updateParameters()
+void VncVaConverter::updatePipeline( VASurfaceID surface )
 {
     VAProcPipelineParameterBuffer param = {};
 
-    param.surface = m_surfaces[0];
+    param.surface = surface;
     param.surface_region = nullptr;
 
     param.output_color_standard = VAProcColorStandardBT709;
@@ -147,7 +130,7 @@ void VncVaConverter::updateParameters()
         VAProcPipelineParameterBufferType, sizeof( param ), &param );
 }
 
-void VncVaConverter::run()
+void VncVaConverter::render( VASurfaceID surface )
 {
-    VncVa::renderPicture( m_context, &m_pipelineBuffer, 1, m_surfaces[1] );
+    VncVa::renderPicture( m_context, &m_pipelineBuffer, 1, surface );
 }

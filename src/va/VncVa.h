@@ -23,12 +23,13 @@ namespace VncVa
     void destroyConfig( VAConfigID );
 
     // context
-    VAContextID createContext( VAConfigID, const QSize&, VASurfaceID );
+    VAContextID createContext( VAConfigID,
+        const QSize&, VASurfaceID = VA_INVALID_ID );
     void destroyContext( VAContextID );
 
     // surface
     VASurfaceID createSurface( unsigned int format,
-        const QSize&, const VASurfaceAttrib*, int count );
+        const QSize&, const VASurfaceAttrib* = nullptr, int count = 0 );
     void destroySurface( VASurfaceID );
 
     // buffer

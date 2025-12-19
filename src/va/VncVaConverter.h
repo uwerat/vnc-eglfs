@@ -10,22 +10,25 @@
 class QRect;
 class QSize;
 
+namespace VncEgl { class DmaBuffer; }
+
 class VncVaConverter
 {
   public:
     VncVaConverter();
     ~VncVaConverter();
 
-    void run();
-    void updateContext( const QSize&, VASurfaceID );
+    void render( VASurfaceID );
+    void updateContext( const QSize& );
 
-    void setTexture( unsigned int, const QSize&, const QRect& );
-    void updateParameters();
+    void setSource( VncEgl::DmaBuffer&, const QSize&, const QRect& );
 
   private:
+    void updatePipeline( VASurfaceID );
+
     VAConfigID m_config = VA_INVALID_ID;
     VAContextID m_context = VA_INVALID_ID;
 
-    VASurfaceID m_surfaces[2] = { VA_INVALID_ID, VA_INVALID_ID };
+    VASurfaceID m_textureSurface = VA_INVALID_ID;
     VABufferID m_pipelineBuffer = VA_INVALID_ID;
 };

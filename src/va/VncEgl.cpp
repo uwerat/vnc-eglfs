@@ -137,7 +137,7 @@ VncEgl::DmaBuffer VncEgl::dmaBuffer( unsigned int texture )
 
     Q_ASSERT( eglDisplay && eglContext != EGL_NO_CONTEXT );
 
-    EGLint attrs[] = { EGL_NONE };
+    const EGLint attrs[] = { EGL_IMAGE_PRESERVED_KHR, EGL_FALSE, EGL_NONE };
 
     auto image = eglCreateImageKHR( eglDisplay, eglContext,
         EGL_GL_TEXTURE_2D_KHR, (EGLClientBuffer)(uintptr_t)texture, attrs);

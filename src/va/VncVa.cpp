@@ -137,8 +137,10 @@ VAContextID VncVa::createContext( VAConfigID config,
 {
     VAContextID context;
 
+    const int count = ( surface != VA_INVALID_ID ) ? 1 : 0;
+
     const auto status = vaCreateContext( display(), config,
-        size.width(), size.height(), VA_PROGRESSIVE, &surface, 1, &context );
+        size.width(), size.height(), VA_PROGRESSIVE, &surface, count, &context );
     checkStatus( "vaCreateContext", status );
 
     return context;
