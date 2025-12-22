@@ -8,11 +8,11 @@
 #include <memory>
 #include <qglobal.h>
 
-class VncFrameGrabber;
 class VncFrame;
 class RfbSocket;
 class QImage;
 class QPoint;
+class QSize;
 
 class RfbPixelStreamer
 {
@@ -20,7 +20,7 @@ class RfbPixelStreamer
     RfbPixelStreamer();
     ~RfbPixelStreamer();
 
-    void sendFrame( const VncFrameGrabber*, int quality, RfbSocket* );
+    void sendFrames( const VncFrame*, int count, RfbSocket* );
     void sendCursor( const QPoint&, const QImage&, RfbSocket* );
 
     void sendServerFormat( RfbSocket* );
@@ -28,6 +28,7 @@ class RfbPixelStreamer
 
   private:
     void sendBytes( const VncFrame&, RfbSocket* );
+    void sendBytesRgb( const QSize&, const uint8_t*, RfbSocket* );
 
   private:
     Q_DISABLE_COPY( RfbPixelStreamer )

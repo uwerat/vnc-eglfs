@@ -23,16 +23,14 @@ class VncClient final : public QObject
     int timerInterval() const;
 
     void markDirty();
-    void updateCursor();
-
-    void updateSize( const QSize& );
 
   Q_SIGNALS:
     void disconnected();
 
   private:
     void processClientData();
-    void maybeSendFrameBuffer();
+    void maybeSendFrames();
+    void maybeSendCursor();
 
     bool handleSetPixelFormat();
     bool handleSetEncodings();

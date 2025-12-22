@@ -5,7 +5,8 @@
 
 #include "VncServer.h"
 #include "VncClient.h"
-#include "VncFrameGrabber.h"
+#include "VncFrame.h"
+#include "VncTextureGrabber.h"
 
 #include <qtcpserver.h>
 #include <qopenglcontext.h>
@@ -14,6 +15,11 @@
 #include <qelapsedtimer.h>
 #include <qloggingcategory.h>
 #include <qreadwritelock.h>
+#include <qvector.h>
+#include <qpointer.h>
+#include <qimage.h>
+#include <qbuffer.h>
+#include <qimagewriter.h>
 
 #include <qpa/qplatformcursor.h>
 
@@ -53,7 +59,10 @@ namespace
         return createCursor( shape );
     }
 #endif
+}
 
+namespace
+{
     class TcpServer final : public QTcpServer
     {
         Q_OBJECT
@@ -116,65 +125,145 @@ namespace
     };
 }
 
+namespace
+{
+    QByteArray frameToJPEG( const VncFrame& frame, int quality )
+    {
+        QByteArray data;
+        QBuffer buffer( &data );
+
+        QImageWriter imageWriter( &buffer, "jpeg" );
+        imageWriter.setQuality( quality );
+
+        const QImage image( frame.bytes(),
+            frame.width(), frame.height(), QImage::Format_RGB32 );
+
+        imageWriter.write( image );
+
+        return data;
+    }
+
+    VncFrame clippedFrame( const VncFrame& frame, const QRect& region )
+    {
+        if ( region == frame.region() )
+            return frame;
+
+        const auto stride = region.width() * sizeof( QRgb );
+
+        QByteArray bytes( region.height() * stride, Qt::Uninitialized );
+
+        auto from = reinterpret_cast< const QRgb* >( frame.bytes() );
+        from += region.top() * frame.width() + region.left();
+
+        auto to = reinterpret_cast< QRgb* >( bytes.data() );
+
+        for ( int i = 0; i < region.height(); i++ )
+        {
+            memcpy( to, from, stride );
+
+            from += frame.width();
+            to += region.width();
+        }
+
+        return VncFrame( VncFrame::Rgb, region, bytes );
+    }
+}
+
+namespace
+{
+    class FrameCache
+    {
+      public:
+        void clear() { m_jpegFrames.clear(); }
+
+        VncFrame& frame( int hash = 0 ) { return m_jpegFrames[ hash ]; }
+        VncFrame& frame( const QRect& rect, int quality )
+            { return frame( qHash( rect, quality ) ); }
+
+      private:
+        QHash< int, VncFrame > m_jpegFrames;
+    };
+}
+
+class VncServer::PrivateData
+{
+  public:
+    QTcpServer* tcpServer = nullptr;
+
+    QPointer< QWindow > window;
+    QVector< QThread* > threads;
+
+    VncTextureGrabber* textureGrabber = nullptr;
+    mutable FrameCache cache;
+
+    VncCursor cursor;
+
+    QMetaObject::Connection connections[2];
+    QReadWriteLock lock;
+};
+
 VncServer::VncServer( int port, QWindow* window )
-    : m_window( window )
-    , m_cursor( createCursor( Qt::ArrowCursor ) )
+    : m_data( new PrivateData() )
 {
     Q_ASSERT( window && window->inherits( "QQuickWindow" ) );
 
-    m_window = window;
-    m_frameGrabber = new VncFrameGrabber( this );
+    m_data->window = window;
+    m_data->cursor = createCursor( Qt::ArrowCursor );
 
     auto tcpServer = new TcpServer( this );
     connect( tcpServer, &TcpServer::connectionRequested, this, &VncServer::addClient );
 
-    m_tcpServer = tcpServer;
+    m_data->tcpServer = tcpServer;
 
-    if( m_tcpServer->listen( QHostAddress::Any, port ) )
+    if( tcpServer->listen( QHostAddress::Any, port ) )
         qCDebug( logConnection ) << "VncServer created on port" << port;
 }
 
 VncServer::~VncServer()
 {
-    delete m_frameGrabber;
-    m_window = nullptr;
+    m_data->window = nullptr;
 
-    const auto& threads = m_threads; // qAsConst is deprecated in Qt6.7, std::as_const is C++17
+    const auto& threads = m_data->threads;
     for ( auto thread : threads )
     {
         thread->quit();
         thread->wait( 20 );
     }
+
+    delete m_data->textureGrabber;
 }
 
 int VncServer::port() const
 {
-    return m_tcpServer->serverPort();
+    return m_data->tcpServer->serverPort();
 }
 
 void VncServer::addClient( qintptr fd )
 {
     auto thread = new ClientThread( fd, this );
-    m_threads += thread;
+    m_data->threads += thread;
 
-    if ( m_window && !m_connections[0] )
+    auto& connections = m_data->connections;
+    auto window = m_data->window.data();
+
+    if ( window && !connections[0] )
     {
         /*
             Qt::DirectConnection: we want to execute the slots on
             the scene graph thread
          */
 
-        m_connections[0] = QObject::connect( m_window, SIGNAL(afterRendering()),
-            this, SLOT(updateFrame()), Qt::DirectConnection );
+        connections[0] = QObject::connect( window, SIGNAL(afterRendering()),
+            this, SLOT(copyWindowBuffer()), Qt::DirectConnection );
 
-        m_connections[1] = QObject::connect( m_window, SIGNAL(sceneGraphInvalidated()),
-            this, SLOT(invalidateFrame()), Qt::DirectConnection );
+        connections[1] = QObject::connect( window, SIGNAL(sceneGraphInvalidated()),
+            this, SLOT(pauseServer()), Qt::DirectConnection );
 
-        QMetaObject::invokeMethod( m_window, "update" );
+        QMetaObject::invokeMethod( window, "update" );
     }
 
-    qCDebug( logConnection ) << "New VNC client attached on port" << m_tcpServer->serverPort()
-        << "#clients" << m_threads.count();
+    qCDebug( logConnection ) << "New VNC client attached on port"
+        << m_data->tcpServer->serverPort() << "#clients" << m_data->threads.count();
 
     connect( thread, &QThread::finished, this, &VncServer::removeClient );
     thread->start();
@@ -182,33 +271,39 @@ void VncServer::addClient( qintptr fd )
 
 void VncServer::removeClient()
 {
-    if ( auto thread = qobject_cast< QThread* >( sender() ) )
-    {
-        m_threads.removeOne( thread );
-        if ( m_threads.isEmpty() && m_connections[0] )
-        {
-            if ( m_connections[0] )
-            {
-                QObject::disconnect( m_connections[0] );
-                QObject::disconnect( m_connections[1] );
-            }
+    auto thread = qobject_cast< QThread* >( sender() );
+    if ( thread == nullptr )
+        return;
 
-            invalidateFrame();
+    auto& threads = m_data->threads;
+    auto& connections = m_data->connections;
+
+    threads.removeOne( thread );
+
+    if ( threads.isEmpty() && connections[0] )
+    {
+        if ( connections[0] )
+        {
+            QObject::disconnect( connections[0] );
+            QObject::disconnect( connections[1] );
         }
 
-        thread->quit();
-        thread->wait( 100 );
-
-        delete thread;
-
-        qCDebug( logConnection ) << "VNC client detached on port" << m_tcpServer->serverPort()
-            << "#clients:" << m_threads.count();
+        pauseServer();
     }
+
+    thread->quit();
+    thread->wait( 100 );
+
+    delete thread;
+
+    qCDebug( logConnection )
+        << "VNC client detached on port" << m_data->tcpServer->serverPort()
+        << "#clients:" << threads.count();
 }
 
 void VncServer::setTimerInterval( int ms )
 {
-    const auto& threads = m_threads;
+    const auto& threads = m_data->threads;
     for ( auto thread : threads )
     {
         auto client = static_cast< ClientThread* >( thread )->client();
@@ -216,14 +311,23 @@ void VncServer::setTimerInterval( int ms )
     }
 }
 
-void VncServer::updateFrame()
+QSize VncServer::windowBufferSize() const
 {
-    QWriteLocker locker( &m_lock );
+    const auto* window = m_data->window.data();
+    return window->size() * window->devicePixelRatio();
+}
 
-    const auto sz = m_window->size() * m_window->devicePixelRatio();
-    m_frameGrabber->update( sz );
+void VncServer::copyWindowBuffer()
+{
+    QWriteLocker locker( &m_data->lock );
 
-    const auto& threads = m_threads;
+    if ( m_data->textureGrabber == nullptr )
+        m_data->textureGrabber = new VncTextureGrabber();
+
+    m_data->textureGrabber->importBackBuffer( windowBufferSize() );
+    m_data->cache.clear();
+
+    const auto& threads = m_data->threads;
     for ( auto thread : threads )
     {
         auto clientThread = static_cast< ClientThread* >( thread );
@@ -231,30 +335,73 @@ void VncServer::updateFrame()
     }
 }
 
-void VncServer::invalidateFrame()
+void VncServer::pauseServer()
 {
-    QWriteLocker locker( &m_lock );
-    m_frameGrabber->invalidate();
+    QWriteLocker locker( &m_data->lock );
+
+    delete m_data->textureGrabber;
+    m_data->textureGrabber = nullptr;
+
+    m_data->cache.clear();
+}
+
+VncFrame VncServer::grabFrame( const QRect& region, int qualityLevel ) const
+{
+    auto textureGrabber = m_data->textureGrabber;
+    if ( textureGrabber == nullptr )
+        return VncFrame();
+
+    auto& cache = m_data->cache;
+
+    if ( qualityLevel == 0 )
+    {
+        auto& frame = cache.frame();
+        if ( frame.byteCount() == 0 )
+            frame = textureGrabber->grabFrame( region, 0 );
+
+        return clippedFrame( frame, region );
+    }
+
+    /*
+        quality: [1:100], level: [0,9].
+        Higher means better quality + less compression
+     */
+
+    const auto quality = ( qualityLevel + 1 ) * 10;
+
+    auto& frame = cache.frame( region, quality );
+
+    if ( frame.byteCount() == 0 )
+    {
+        if ( textureGrabber->supportsVideoAcceleration() )
+        {
+            frame = textureGrabber->grabFrame( region, quality );
+        }
+        else
+        {
+            const auto frm = grabFrame( region, 0 );
+
+            frame.setFrame( VncFrame::Jpeg,
+                region, frameToJPEG( frm, quality ) );
+        }
+    }
+
+    return frame;
 }
 
 QWindow* VncServer::window() const
 {
-    return m_window;
-}
-
-const VncFrameGrabber* VncServer::frameGrabber() const
-{
-    return m_frameGrabber;
+    return m_data->window;
 }
 
 QReadWriteLock* VncServer::lock() const
 {
-    return &m_lock;
+    return &m_data->lock;
 }
 
 VncCursor VncServer::cursor() const
 {
-    return m_cursor;
+    return m_data->cursor;
 }
 
 #include "VncServer.moc"

@@ -42,7 +42,7 @@ class VncTextureGrabber : public QThread
     QWaitCondition m_waitCondition;
     QAtomicInt m_abort {0};
 
-    QRect m_subRect;
+    QRect m_region;
     int m_quality = 0;
 
     VncFrame m_frame;

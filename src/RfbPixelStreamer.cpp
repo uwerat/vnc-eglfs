@@ -5,7 +5,7 @@
 
 #include "RfbPixelStreamer.h"
 #include "RfbSocket.h"
-#include "VncFrameGrabber.h"
+#include "VncFrame.h"
 
 #include <qimage.h>
 #include <qendian.h>
@@ -203,31 +203,7 @@ void RfbPixelStreamer::sendBytes( const VncFrame& frame, RfbSocket* socket )
 {
     if ( frame.encoding() == VncFrame::Rgb )
     {
-        auto line = reinterpret_cast< const QRgb* >( frame.bytes() );
-
-        const auto& format = m_data->format;
-
-        if ( format.isDefault() )
-        {
-            for ( int i = 0; i < frame.height(); ++i )
-            {
-                socket->sendScanLine32( line, frame.width() );
-                line += frame.width();
-            }
-        }
-        else
-        {
-            const int count = frame.width() * format.bytesPerPixel();
-            QVarLengthArray< char > buffer( count );
-
-            for ( int i = 0; i < frame.height(); ++i )
-            {
-                format.convertBuffer( line, frame.width(), buffer.data() );
-                socket->sendScanLine8( buffer.constData(), buffer.size() );
-
-                line += frame.width();
-            }
-        }
+        sendBytesRgb( frame.size(), frame.bytes(), socket );
     }
     else
     {
@@ -256,72 +232,55 @@ void RfbPixelStreamer::sendBytes( const VncFrame& frame, RfbSocket* socket )
     }
 }
 
-static QVector< QRect > tightRects( const QSize& sz )
+void RfbPixelStreamer::sendBytesRgb(
+    const QSize& size, const uint8_t* data, RfbSocket* socket )
 {
-    const int maxWidth = 2048;
+    auto line = reinterpret_cast< const QRgb* >( data );
 
-    QVector< QRect > rects;
-    rects.reserve( sz.width() / maxWidth + 1 );
+    const auto& format = m_data->format;
 
-    // Tight encoding limits the width of a rectangle
-
-    for ( int x = 0; x < sz.width(); x += maxWidth )
+    if ( format.isDefault() )
     {
-        const int width = qMin( maxWidth, sz.width() - x );
-        rects += QRect( x, 0, width, sz.height() );
-    }
-
-    return rects;
-}
-
-void RfbPixelStreamer::sendFrame(
-    const VncFrameGrabber* grabber, int qualityLevel, RfbSocket* socket )
-{
-    QVector< QRect > rects;
-
-    const auto encoding = ( qualityLevel > 0 )
-        ? VncFrame::Jpeg : VncFrame::Rgb;
-
-    if ( encoding == VncFrame::Jpeg )
-    {
-        /*
-            We prefer to avoid splitting the frame for the moment as it results
-            in resizing the libva surface - an expensive operation. 
-            An efficient implementation should use 2 surfaces - one with 2048
-            and the other one for the reminder. TODO ...
-         */
-        rects = ::tightRects( grabber->frameSize() );
-
-#if 0
-        /*
-            I didn't notice any problems with the tested VNC viewers
-            when ignoring the max. width for Tight encoded rectangles.
-            So let's ignore tiling until see above.
-         */
-        rects.clear();
-        rects += QRect( QPoint(), grabber->frameSize() );
-#endif
+        for ( int i = 0; i < size.height(); i++ )
+        {
+            socket->sendScanLine32( line, size.width() );
+            line += size.width();
+        }
     }
     else
     {
-        rects += QRect( QPoint(), grabber->frameSize() );
-    }
+        const int count = size.width() * format.bytesPerPixel();
+        QVarLengthArray< char > buffer( count );
 
+        for ( int i = 0; i < size.height(); ++i )
+        {
+            format.convertBuffer( line, size.width(), buffer.data() );
+            socket->sendScanLine8( buffer.constData(), buffer.size() );
+
+            line += size.width();
+        }
+    }
+}
+
+void RfbPixelStreamer::sendFrames(
+    const VncFrame* frames, int count, RfbSocket* socket )
+{
     socket->sendUint8( 0 ); // msg type
     socket->sendPadding( 1 );
 
-    socket->sendUint16( rects.count() );
+    socket->sendUint16( count );
 
-    for ( const auto& r : rects )
+    for ( int i = 0; i < count; i++ )
     {
-        socket->sendRect64( r );
+        const auto& frame = frames[i];
 
-        if ( encoding == VncFrame::Jpeg )
+        socket->sendRect64( frame.region() );
+
+        if ( frame.encoding() == VncFrame::Jpeg )
             socket->sendEncoding32( 7 ); // Tight
         else
             socket->sendEncoding32( 0 ); // Raw
 
-        const auto frame = grabber->subFrame( r, encoding, qualityLevel );
         sendBytes( frame, socket );
     }
 
@@ -341,10 +300,7 @@ void RfbPixelStreamer::sendCursor(
 
     {
         const auto image = cursor.convertToFormat( QImage::Format_RGB32 );
-        const auto frame = VncFrame::fromRawData(
-            VncFrame::Rgb, image.width(), image.height(), image.constBits() );
-
-        sendBytes( frame, socket );
+        sendBytesRgb( image.size(), image.constBits(), socket );
     }
 
     {

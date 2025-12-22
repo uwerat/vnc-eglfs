@@ -58,20 +58,22 @@ class VncTextureGrabber::FrameBufferObject : QOpenGLExtraFunctions
 
     void importBackBuffer()
     {
-        const int w = m_size.width(); 
+        const int w = m_size.width();
         const int h = m_size.height();
 
         glBindFramebuffer( GL_DRAW_FRAMEBUFFER, m_fbo );
 
         glReadBuffer( GL_BACK );
-        glBlitFramebuffer( 0, 0, w, h, 0, h, w, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST ); 
+        glBlitFramebuffer( 0, 0, w, h, 0, h, w, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST );
 
         glBindFramebuffer( GL_FRAMEBUFFER, 0 );
         glBindTexture( GL_TEXTURE_2D, 0 );
     }
 
-    void readPixels( uint8_t* data  )
+    QByteArray readPixels()
     {
+        QByteArray bytes( m_size.width() * m_size.height() * 4, Qt::Uninitialized );
+
         glBindFramebuffer( GL_FRAMEBUFFER, m_fbo );
 
         glFramebufferTexture2D( GL_FRAMEBUFFER,
@@ -82,10 +84,12 @@ class VncTextureGrabber::FrameBufferObject : QOpenGLExtraFunctions
             qDebug() << "FBO setup failed!";
 
         glReadPixels( 0, 0, m_size.width(), m_size.height(),
-            GL_BGRA, GL_UNSIGNED_BYTE, data );
+            GL_BGRA, GL_UNSIGNED_BYTE, bytes.data() );
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glBindTexture( GL_TEXTURE_2D, 0 );
+
+        return bytes;
     }
 
   private:
@@ -105,7 +109,7 @@ bool VncTextureGrabber::isSupported( const QOpenGLContext* context )
         - glBlitFramebuffer
             we could use glCopyTexImage2D and flip somewhere else.
      */
-    if ( context->format().majorVersion() < 3 ) 
+    if ( context->format().majorVersion() < 3 )
     {
         return context->hasExtension("GL_EXT_framebuffer_blit")
             || context->hasExtension("GL_NV_framebuffer_blit");
@@ -141,11 +145,11 @@ void VncTextureGrabber::importBackBuffer( const QSize& size )
     m_fbo->importBackBuffer();
 }
 
-VncFrame VncTextureGrabber::grabFrame( const QRect& subRect, const int quality )
+VncFrame VncTextureGrabber::grabFrame( const QRect& region, const int quality )
 {
     QMutexLocker locker( &m_mutex );
 
-    m_subRect = subRect;
+    m_region = region;
     m_quality = quality;
 
     m_done = false;
@@ -166,12 +170,12 @@ void VncTextureGrabber::run()
     QSurfaceFormat fmt;
     fmt.setRenderableType( QSurfaceFormat::OpenGLES );
     fmt.setVersion(2,0);
-    
+
     QOpenGLContext contextES;
     contextES.setShareContext( m_context );
     contextES.setFormat( fmt );
     contextES.create();
-            
+
     QOffscreenSurface offscreen;
     offscreen.setFormat(fmt);
     offscreen.create();
@@ -189,7 +193,7 @@ void VncTextureGrabber::run()
 
     while ( !m_abort.loadAcquire() )
     {
-        QRect subRect;
+        QRect region;
         int quality;
 
         {
@@ -201,7 +205,7 @@ void VncTextureGrabber::run()
                 continue;
             }
 
-            subRect = m_subRect;
+            region = m_region;
             quality = m_quality;
 
             m_requested = false;
@@ -213,17 +217,13 @@ void VncTextureGrabber::run()
 
         if ( quality <= 0 )
         {
-            VncFrame rgbFrame( VncFrame::Rgb, m_fbo->size() );
-            m_fbo->readPixels( rgbFrame.editableBytes() );
-
-            frame = rgbFrame;
+            const auto data = m_fbo->readPixels();
+            frame.setFrame( VncFrame::Rgb, QRect( QPoint(), m_fbo->size() ), data );
         }
         else
         {
-            const auto data = encoder.encode( m_fbo->size(), subRect, quality );
-
-            frame = VncFrame::fromByteArray( VncFrame::Jpeg,
-                subRect.width(), subRect.height(), data );
+            const auto data = encoder.encode( m_fbo->size(), region, quality );
+            frame.setFrame( VncFrame::Jpeg, region, data );
         }
 
         contextES.doneCurrent();

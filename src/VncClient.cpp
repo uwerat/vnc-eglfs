@@ -5,7 +5,7 @@
 
 #include "VncClient.h"
 #include "VncServer.h"
-#include "VncFrameGrabber.h"
+#include "VncFrame.h"
 
 #include "RfbSocket.h"
 #include "RfbInputEventHandler.h"
@@ -303,7 +303,7 @@ VncClient::VncClient( qintptr socketDescriptor, VncServer* server )
     m_data->socket.open( socket );
 
     m_data->updateTimer.setInterval( Vnc::timerInterval() );
-    connect( &m_data->updateTimer, &QTimer::timeout, this, &VncClient::maybeSendFrameBuffer );
+    connect( &m_data->updateTimer, &QTimer::timeout, this, &VncClient::maybeSendFrames );
 
     // send protocol version
     const char proto[] = "RFB 003.003\n";
@@ -499,8 +499,16 @@ void VncClient::processClientData()
     }
 }
 
-void VncClient::updateSize( const QSize& size )
+void VncClient::maybeSendFrames()
 {
+    const auto server = m_data->server;
+
+    QReadLocker locker( server->lock() );
+
+    const auto size = server->windowBufferSize();
+    if ( size.isEmpty() )
+        return;
+
     if ( size != m_data->frameBufferSize )
     {
         if ( m_data->screenResizable )
@@ -516,24 +524,37 @@ void VncClient::updateSize( const QSize& size )
 
         m_data->frameBufferSize = size;
     }
-}
-
-void VncClient::maybeSendFrameBuffer()
-{
-    QReadLocker locker( m_data->server->lock() );
-
-    const auto grabber = m_data->server->frameGrabber();
-    if ( !grabber->isValid() )
-        return;
-
-    updateSize( grabber->frameSize() );
 
     if ( m_data->frameRequested && m_data->frameDirty )
     {
-        m_data->frameRequested = m_data->frameDirty = false;
+        int quality = 0;
+        if ( m_data->tightEnabled && m_data->jpegLevel > 0 )
+            quality = m_data->jpegLevel;
 
-        const auto quality = m_data->tightEnabled ? m_data->jpegLevel : 0;
-        m_data->pixelStreamer.sendFrame( grabber, quality, &m_data->socket );
+        const int maxWidth = 2048; // tight encoding
+
+        if ( m_data->tightEnabled && ( size.width() > maxWidth ) )
+        {
+            QVarLengthArray < VncFrame > frames;
+            frames.reserve( size.width() / maxWidth + 1 );
+
+            for ( int x = 0; x < size.width(); x += maxWidth )
+            {
+                const int width = qMin( maxWidth, size.width() - x );
+                frames += m_data->server->grabFrame(
+                    QRect( x, 0, width, size.height() ), quality );
+            }
+
+            m_data->pixelStreamer.sendFrames(
+                frames.constData(), frames.count(), &m_data->socket );
+        }
+        else
+        {
+            const auto frame = m_data->server->grabFrame(
+                QRect( 0, 0, size.width(), size.height() ), quality );
+
+            m_data->pixelStreamer.sendFrames( &frame, 1, &m_data->socket );
+        }
     }
 }
 
@@ -585,7 +606,7 @@ bool VncClient::handleSetEncodings()
         else if ( encoding == RfbData::Cursor )
         {
             m_data->cursorEnabled = true;
-            updateCursor();
+            maybeSendCursor();
         }
         else if ( encoding == RfbData::DesktopSize )
         {
@@ -704,7 +725,7 @@ bool VncClient::handleClientCutText()
     return true;
 }
 
-void VncClient::updateCursor()
+void VncClient::maybeSendCursor()
 {
     if ( m_data->cursorEnabled )
     {

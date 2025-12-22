@@ -7,13 +7,11 @@
 
 #include <qobject.h>
 #include <qimage.h>
-#include <qvector.h>
-#include <qpointer.h>
-#include <qreadwritelock.h>
+#include <memory>
 
+class VncFrame;
 class QWindow;
-class QTcpServer;
-class VncFrameGrabber;
+class QReadWriteLock;
 
 class VncCursor
 {
@@ -31,33 +29,26 @@ class VncServer final : public QObject
     ~VncServer() override;
 
     QReadWriteLock* lock() const;
-    const VncFrameGrabber* frameGrabber() const;
-
-    VncCursor cursor() const;
 
     QWindow* window() const;
     int port() const;
 
     void setTimerInterval( int ms );
 
+    QSize windowBufferSize() const;
+    VncFrame grabFrame( const QRect& region, int qualityLevel ) const;
+
+    VncCursor cursor() const;
+
   private Q_SLOTS:
-    void updateFrame();
-    void invalidateFrame();
+    void copyWindowBuffer();
+    void pauseServer();
 
   private:
     void addClient( qintptr fd );
     void removeClient();
 
-    QTcpServer* m_tcpServer = nullptr;
-
-    QPointer< QWindow > m_window;
-    QVector< QThread* > m_threads;
-
-    VncFrameGrabber* m_frameGrabber = nullptr;
-    VncCursor m_cursor;
-
-    QMetaObject::Connection m_connections[2];
-
-    mutable QReadWriteLock m_lock;
+    class PrivateData;
+    std::unique_ptr< PrivateData > m_data;
 };
 

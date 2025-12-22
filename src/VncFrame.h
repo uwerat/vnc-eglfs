@@ -19,52 +19,53 @@ class VncFrame
         Jpeg
     };
 
-    VncFrame() = default;
+    VncFrame();
+    VncFrame( Encoding, const QRect&, const QByteArray& );
 
-    VncFrame( Encoding, const QSize& );
-    VncFrame( Encoding, int width, int height );
+    void setFrame( Encoding, const QRect&, const QByteArray& );
 
-    VncFrame( Encoding, const QSize&, const uint8_t* );
-    VncFrame( Encoding, int width, int height, const uint8_t* );
+    Encoding encoding() const;
 
-    VncFrame subFrame( const QRect& ) const;
+    int width() const;
+    int height() const;
+    QSize size() const;
+    QRect region() const;
 
-    inline Encoding encoding() const { return m_encoding; }
-
-    inline int width() const { return m_width; }
-    inline int height() const { return m_height; }
-
-    inline QSize size() const { return QSize( m_width, m_height ); }
-    inline QRect boundingRect() const { return QRect( 0, 0, m_width, m_height ); }
-
-    inline qsizetype byteCount() const { return m_bytes.size(); }
-
+    qsizetype byteCount() const;
     const uint8_t* bytes() const;
-    uint8_t* editableBytes();
-
-    inline bool isValid() const { return !m_bytes.isEmpty(); }
-    void reset();
-
-    static VncFrame fromRawData( Encoding, int width, int height, const uint8_t* );
-    static VncFrame fromByteArray( Encoding, int width, int height, const QByteArray& );
 
   private:
-    VncFrame( Encoding, int width, int height, const QByteArray& );
     Encoding m_encoding = Raw;
-
-    int m_width = 0;
-    int m_height = 0;
-
-    // using QByteArray because of QByteArray::fromRawData
+    QRect m_region;
     QByteArray m_bytes;
 };
 
-inline VncFrame::VncFrame( Encoding encoding, const QSize& size )
-    : VncFrame( encoding, size.width(), size.height() )
+inline VncFrame::Encoding VncFrame::encoding() const
 {
+    return m_encoding;
 }
 
-inline VncFrame::VncFrame( Encoding encoding, const QSize& size, const uint8_t* bytes )
-    : VncFrame( encoding, size.width(), size.height(), bytes )
+inline int VncFrame::width() const
 {
+    return m_region.width();
+}
+
+inline int VncFrame::height() const
+{
+    return m_region.height();
+}
+
+inline QSize VncFrame::size() const
+{
+    return m_region.size();
+}
+
+inline QRect VncFrame::region() const
+{
+    return m_region;
+}
+
+inline qsizetype VncFrame::byteCount() const
+{
+    return m_bytes.size();
 }

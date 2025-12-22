@@ -12,7 +12,6 @@ list(APPEND HEADERS
     VncServer.h
     VncClient.h
     VncFrame.h
-    VncFrameGrabber.h
     VncTextureGrabber.h
     VncNamespace.h
 )
@@ -24,7 +23,6 @@ list(APPEND SOURCES
     VncServer.cpp
     VncClient.cpp
     VncFrame.cpp
-    VncFrameGrabber.cpp
     VncTextureGrabber.cpp
     VncNamespace.cpp
 )
