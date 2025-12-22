@@ -6,7 +6,7 @@
 #include "VncServer.h"
 #include "VncClient.h"
 #include "VncFrame.h"
-#include "VncTextureGrabber.h"
+#include "VncFrameGrabber.h"
 
 #include <qtcpserver.h>
 #include <qopenglcontext.h>
@@ -193,7 +193,7 @@ class VncServer::PrivateData
     QPointer< QWindow > window;
     QVector< QThread* > threads;
 
-    VncTextureGrabber* textureGrabber = nullptr;
+    VncFrameGrabber* grabber = nullptr;
     mutable FrameCache cache;
 
     VncCursor cursor;
@@ -230,7 +230,7 @@ VncServer::~VncServer()
         thread->wait( 20 );
     }
 
-    delete m_data->textureGrabber;
+    delete m_data->grabber;
 }
 
 int VncServer::port() const
@@ -321,10 +321,10 @@ void VncServer::copyWindowBuffer()
 {
     QWriteLocker locker( &m_data->lock );
 
-    if ( m_data->textureGrabber == nullptr )
-        m_data->textureGrabber = new VncTextureGrabber();
+    if ( m_data->grabber == nullptr )
+        m_data->grabber = new VncFrameGrabber();
 
-    m_data->textureGrabber->importBackBuffer( windowBufferSize() );
+    m_data->grabber->importBackBuffer( windowBufferSize() );
     m_data->cache.clear();
 
     const auto& threads = m_data->threads;
@@ -339,16 +339,16 @@ void VncServer::pauseServer()
 {
     QWriteLocker locker( &m_data->lock );
 
-    delete m_data->textureGrabber;
-    m_data->textureGrabber = nullptr;
+    delete m_data->grabber;
+    m_data->grabber = nullptr;
 
     m_data->cache.clear();
 }
 
 VncFrame VncServer::grabFrame( const QRect& region, int qualityLevel ) const
 {
-    auto textureGrabber = m_data->textureGrabber;
-    if ( textureGrabber == nullptr )
+    auto grabber = m_data->grabber;
+    if ( grabber == nullptr )
         return VncFrame();
 
     auto& cache = m_data->cache;
@@ -357,7 +357,7 @@ VncFrame VncServer::grabFrame( const QRect& region, int qualityLevel ) const
     {
         auto& frame = cache.frame();
         if ( frame.byteCount() == 0 )
-            frame = textureGrabber->grabFrame( region, 0 );
+            frame = grabber->grabFrame( region, 0 );
 
         return clippedFrame( frame, region );
     }
@@ -373,9 +373,9 @@ VncFrame VncServer::grabFrame( const QRect& region, int qualityLevel ) const
 
     if ( frame.byteCount() == 0 )
     {
-        if ( textureGrabber->supportsVideoAcceleration() )
+        if ( grabber->supportsVideoAcceleration() )
         {
-            frame = textureGrabber->grabFrame( region, quality );
+            frame = grabber->grabFrame( region, quality );
         }
         else
         {

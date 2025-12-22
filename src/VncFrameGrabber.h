@@ -16,11 +16,11 @@
 
 class QOpenGLContext;
 
-class VncTextureGrabber : public QThread
+class VncFrameGrabber : public QThread
 {
   public:
-    VncTextureGrabber( QObject* parent = nullptr );
-    ~VncTextureGrabber() override;
+    VncFrameGrabber( QObject* parent = nullptr );
+    ~VncFrameGrabber() override;
 
     bool supportsVideoAcceleration() const;
     VncFrame grabFrame( const QRect& subRect, int quality );
@@ -53,7 +53,7 @@ class VncTextureGrabber : public QThread
     bool m_videoAcceleration = false;
 };
 
-inline bool VncTextureGrabber::supportsVideoAcceleration() const
+inline bool VncFrameGrabber::supportsVideoAcceleration() const
 {
     return m_videoAcceleration;
 }

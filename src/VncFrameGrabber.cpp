@@ -3,7 +3,7 @@
  *            SPDX-License-Identifier: BSD-3-Clause
  *****************************************************************************/
 
-#include "VncTextureGrabber.h"
+#include "VncFrameGrabber.h"
 
 #ifdef VNC_VA_ENCODER
 #include "va/VncVaApplication.h"
@@ -13,7 +13,7 @@
 #include <qopenglcontext.h>
 #include <qopenglextrafunctions.h>
 
-class VncTextureGrabber::FrameBufferObject : QOpenGLExtraFunctions
+class VncFrameGrabber::FrameBufferObject : QOpenGLExtraFunctions
 {
   public:
     FrameBufferObject()
@@ -99,7 +99,7 @@ class VncTextureGrabber::FrameBufferObject : QOpenGLExtraFunctions
     QSize m_size;
 };
 
-bool VncTextureGrabber::isSupported( const QOpenGLContext* context )
+bool VncFrameGrabber::isSupported( const QOpenGLContext* context )
 {
     /*
         - glReadBuffer
@@ -118,16 +118,19 @@ bool VncTextureGrabber::isSupported( const QOpenGLContext* context )
     return true;
 }
 
-VncTextureGrabber::VncTextureGrabber( QObject* parent )
+VncFrameGrabber::VncFrameGrabber( QObject* parent )
     : QThread(parent)
     , m_context( QOpenGLContext::currentContext() )
     , m_fbo( new FrameBufferObject() )
 {
+#ifdef VNC_VA_ENCODER
     m_videoAcceleration = VncVaApplication::isValid();
+#endif
+
     start(); // launch the thread
 }
 
-VncTextureGrabber::~VncTextureGrabber()
+VncFrameGrabber::~VncFrameGrabber()
 {
     {
         QMutexLocker locker( &m_mutex );
@@ -139,13 +142,13 @@ VncTextureGrabber::~VncTextureGrabber()
     delete m_fbo;
 }
 
-void VncTextureGrabber::importBackBuffer( const QSize& size )
+void VncFrameGrabber::importBackBuffer( const QSize& size )
 {
     m_fbo->resize( size );
     m_fbo->importBackBuffer();
 }
 
-VncFrame VncTextureGrabber::grabFrame( const QRect& region, const int quality )
+VncFrame VncFrameGrabber::grabFrame( const QRect& region, const int quality )
 {
     QMutexLocker locker( &m_mutex );
 
@@ -165,7 +168,7 @@ VncFrame VncTextureGrabber::grabFrame( const QRect& region, const int quality )
     return m_frame;
 }
 
-void VncTextureGrabber::run()
+void VncFrameGrabber::run()
 {
     QSurfaceFormat fmt;
     fmt.setRenderableType( QSurfaceFormat::OpenGLES );
