@@ -34,6 +34,10 @@ class VncFrame
     qsizetype byteCount() const;
     const uint8_t* bytes() const;
 
+    // only for RGB
+    VncFrame encoded( int quality ) const;
+    VncFrame clipped( const QRect& ) const;
+
   private:
     Encoding m_encoding = Raw;
     QRect m_region;

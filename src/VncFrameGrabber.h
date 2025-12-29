@@ -5,16 +5,11 @@
 
 #pragma once
 
-#include "VncFrame.h"
-
-#include <qrect.h>
-#include <qmutex.h>
 #include <qthread.h>
+#include <memory>
 
-#include <qwaitcondition.h>
-#include <QAtomicInt>
-
-class QOpenGLContext;
+class VncFrame;
+class QRect;
 
 class VncFrameGrabber : public QThread
 {
@@ -23,37 +18,14 @@ class VncFrameGrabber : public QThread
     ~VncFrameGrabber() override;
 
     bool supportsVideoAcceleration() const;
-    VncFrame grabFrame( const QRect& subRect, int quality );
+    VncFrame grabFrame( const QRect& region, int quality );
 
     void importBackBuffer( const QSize& );
-
-    static bool isSupported( const QOpenGLContext* );
 
   protected:
     void run() override;
 
   private:
-    QOpenGLContext* m_context = nullptr;
-
-    class FrameBufferObject;
-    FrameBufferObject* m_fbo = nullptr;
-
-    QMutex m_mutex;
-    QWaitCondition m_waitCondition;
-    QAtomicInt m_abort {0};
-
-    QRect m_region;
-    int m_quality = 0;
-
-    VncFrame m_frame;
-
-    bool m_done = false;
-    bool m_requested = false;
-
-    bool m_videoAcceleration = false;
+    class PrivateData;
+    std::unique_ptr< PrivateData > m_data;
 };
-
-inline bool VncFrameGrabber::supportsVideoAcceleration() const
-{
-    return m_videoAcceleration;
-}

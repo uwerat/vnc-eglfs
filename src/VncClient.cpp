@@ -503,8 +503,6 @@ void VncClient::maybeSendFrames()
 {
     const auto server = m_data->server;
 
-    QReadLocker locker( server->lock() );
-
     const auto size = server->windowBufferSize();
     if ( size.isEmpty() )
         return;
@@ -531,30 +529,21 @@ void VncClient::maybeSendFrames()
         if ( m_data->tightEnabled && m_data->jpegLevel > 0 )
             quality = m_data->jpegLevel;
 
-        const int maxWidth = 2048; // tight encoding
+        const int maxWidth = m_data->tightEnabled ? 2048 : 1000000;
 
-        if ( m_data->tightEnabled && ( size.width() > maxWidth ) )
+        QVector< QRect > regions;
+        regions.reserve( size.width() / maxWidth + 1 );
+
+        for ( int x = 0; x < size.width(); x += maxWidth )
         {
-            QVarLengthArray < VncFrame > frames;
-            frames.reserve( size.width() / maxWidth + 1 );
-
-            for ( int x = 0; x < size.width(); x += maxWidth )
-            {
-                const int width = qMin( maxWidth, size.width() - x );
-                frames += m_data->server->grabFrame(
-                    QRect( x, 0, width, size.height() ), quality );
-            }
-
-            m_data->pixelStreamer.sendFrames(
-                frames.constData(), frames.count(), &m_data->socket );
+            const int width = qMin( maxWidth, size.width() - x );
+            regions += QRect( x, 0, width, size.height() );
         }
-        else
-        {
-            const auto frame = m_data->server->grabFrame(
-                QRect( 0, 0, size.width(), size.height() ), quality );
 
-            m_data->pixelStreamer.sendFrames( &frame, 1, &m_data->socket );
-        }
+        const auto frames = server->grabFrames( regions, quality );
+
+        m_data->pixelStreamer.sendFrames(
+            frames.constData(), frames.count(), &m_data->socket );
     }
 }
 

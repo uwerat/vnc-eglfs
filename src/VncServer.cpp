@@ -12,14 +12,12 @@
 #include <qopenglcontext.h>
 #include <qwindow.h>
 #include <qthread.h>
+#include <qmutex.h>
 #include <qelapsedtimer.h>
 #include <qloggingcategory.h>
 #include <qreadwritelock.h>
 #include <qvector.h>
 #include <qpointer.h>
-#include <qimage.h>
-#include <qbuffer.h>
-#include <qimagewriter.h>
 
 #include <qpa/qplatformcursor.h>
 
@@ -127,67 +125,56 @@ namespace
 
 namespace
 {
-    QByteArray frameToJPEG( const VncFrame& frame, int quality )
-    {
-        QByteArray data;
-        QBuffer buffer( &data );
-
-        QImageWriter imageWriter( &buffer, "jpeg" );
-        imageWriter.setQuality( quality );
-
-        const QImage image( frame.bytes(),
-            frame.width(), frame.height(), QImage::Format_RGB32 );
-
-        imageWriter.write( image );
-
-        return data;
-    }
-
-    VncFrame clippedFrame( const VncFrame& frame, const QRect& region )
-    {
-        if ( region == frame.region() )
-            return frame;
-
-        const auto stride = region.width() * sizeof( QRgb );
-
-        QByteArray bytes( region.height() * stride, Qt::Uninitialized );
-
-        auto from = reinterpret_cast< const QRgb* >( frame.bytes() );
-        from += region.top() * frame.width() + region.left();
-
-        auto to = reinterpret_cast< QRgb* >( bytes.data() );
-
-        for ( int i = 0; i < region.height(); i++ )
-        {
-            memcpy( to, from, stride );
-
-            from += frame.width();
-            to += region.width();
-        }
-
-        return VncFrame( VncFrame::Rgb, region, bytes );
-    }
-}
-
-namespace
-{
     class FrameCache
     {
       public:
-        void clear() { m_jpegFrames.clear(); }
+        void clear() { m_frames.clear(); }
 
-        VncFrame& frame( int hash = 0 ) { return m_jpegFrames[ hash ]; }
+        VncFrame& frame( int hash = 0 ) { return m_frames[ hash ]; }
         VncFrame& frame( const QRect& rect, int quality )
             { return frame( qHash( rect, quality ) ); }
 
       private:
-        QHash< int, VncFrame > m_jpegFrames;
+        QHash< int, VncFrame > m_frames;
     };
 }
 
 class VncServer::PrivateData
 {
   public:
+    VncFrame grabWindowBuffer( const VncServer* server )
+    {
+        const QRect r( QPoint(), server->windowBufferSize() );
+        return grabFrame( r, 0 );
+    }
+
+    VncFrame buildFrame( const VncFrame& windowFrame,
+        const QRect& region, int quality )
+    {
+        QMutexLocker locker( &cacheMutex );
+
+        auto& frame = cache.frame( region, quality );
+        if ( frame.byteCount() == 0 )
+        {
+            frame = windowFrame.clipped( region );
+            if ( quality > 0 )
+                frame = frame.encoded( quality );
+        }
+
+        return frame;
+    }
+
+    VncFrame& grabFrame( const QRect& region, int quality )
+    {
+        QMutexLocker locker( &cacheMutex );
+
+        auto& frame = cache.frame( region, quality );
+        if ( frame.byteCount() == 0 )
+            frame = grabber->grabFrame( region, quality );
+
+        return frame;
+    }
+
     QTcpServer* tcpServer = nullptr;
 
     QPointer< QWindow > window;
@@ -199,7 +186,9 @@ class VncServer::PrivateData
     VncCursor cursor;
 
     QMetaObject::Connection connections[2];
-    QReadWriteLock lock;
+
+    QReadWriteLock windowBufferLock;
+    QMutex cacheMutex;
 };
 
 VncServer::VncServer( int port, QWindow* window )
@@ -319,7 +308,7 @@ QSize VncServer::windowBufferSize() const
 
 void VncServer::copyWindowBuffer()
 {
-    QWriteLocker locker( &m_data->lock );
+    QWriteLocker locker( &m_data->windowBufferLock );
 
     if ( m_data->grabber == nullptr )
         m_data->grabber = new VncFrameGrabber();
@@ -337,7 +326,7 @@ void VncServer::copyWindowBuffer()
 
 void VncServer::pauseServer()
 {
-    QWriteLocker locker( &m_data->lock );
+    QWriteLocker locker( &m_data->windowBufferLock );
 
     delete m_data->grabber;
     m_data->grabber = nullptr;
@@ -345,58 +334,60 @@ void VncServer::pauseServer()
     m_data->cache.clear();
 }
 
-VncFrame VncServer::grabFrame( const QRect& region, int qualityLevel ) const
+QVector< VncFrame > VncServer::grabFrames(
+    const QVector< QRect >& regions, int qualityLevel ) const
 {
+    // we are on the client thread !!
+    QReadLocker locker( &m_data->windowBufferLock );
+
     auto grabber = m_data->grabber;
     if ( grabber == nullptr )
-        return VncFrame();
+        return QVector< VncFrame >();
 
-    auto& cache = m_data->cache;
-
-    if ( qualityLevel == 0 )
-    {
-        auto& frame = cache.frame();
-        if ( frame.byteCount() == 0 )
-            frame = grabber->grabFrame( region, 0 );
-
-        return clippedFrame( frame, region );
-    }
+    QVector< VncFrame > frames;
+    frames.reserve( regions.size() );
 
     /*
         quality: [1:100], level: [0,9].
         Higher means better quality + less compression
      */
+    int quality = 0;
+    if ( qualityLevel > 0 )
+        quality = ( qualityLevel + 1 ) * 10;
 
-    const auto quality = ( qualityLevel + 1 ) * 10;
-
-    auto& frame = cache.frame( region, quality );
-
-    if ( frame.byteCount() == 0 )
+    if ( quality == 0 || !grabber->supportsVideoAcceleration() )
     {
-        if ( grabber->supportsVideoAcceleration() )
-        {
-            frame = grabber->grabFrame( region, quality );
-        }
-        else
-        {
-            const auto frm = grabFrame( region, 0 );
+        // Grabbing the complete window buffer and clipping/encoding on the CPU.
 
-            frame.setFrame( VncFrame::Jpeg,
-                region, frameToJPEG( frm, quality ) );
-        }
+        const auto windowFrame = m_data->grabWindowBuffer( this );
+
+        for ( const auto& r : regions )
+            frames += m_data->buildFrame( windowFrame, r, quality );
+    }
+    else
+    {
+        /*
+            Encoding/Clipping is done on the GPU - significantly reducing
+            the amount of data tha needs to be transferred between GPU/CPU.
+
+            Note that the encoding is done in 2 steps:
+                - RGB -> YUV
+                - YUV -> JPEG
+
+            For the moment we block updates of the window buffer
+            ( = the scene graph thread ) during the complete operation while the
+            lock is not required for the second step. TODO ...
+         */
+        for ( const auto& r : regions )
+            frames += m_data->grabFrame( r, quality );
     }
 
-    return frame;
+    return frames;
 }
 
 QWindow* VncServer::window() const
 {
     return m_data->window;
-}
-
-QReadWriteLock* VncServer::lock() const
-{
-    return &m_data->lock;
 }
 
 VncCursor VncServer::cursor() const

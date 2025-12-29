@@ -7,6 +7,7 @@
 
 #include <qobject.h>
 #include <qimage.h>
+#include <qvector.h>
 #include <memory>
 
 class VncFrame;
@@ -28,15 +29,15 @@ class VncServer final : public QObject
     VncServer( int port, QWindow* );
     ~VncServer() override;
 
-    QReadWriteLock* lock() const;
-
     QWindow* window() const;
     int port() const;
 
     void setTimerInterval( int ms );
 
     QSize windowBufferSize() const;
-    VncFrame grabFrame( const QRect& region, int qualityLevel ) const;
+
+    QVector< VncFrame > grabFrames(
+        const QVector< QRect >&, int qualityLevel ) const;
 
     VncCursor cursor() const;
 
