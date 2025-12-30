@@ -303,6 +303,9 @@ void VncServer::setTimerInterval( int ms )
 QSize VncServer::windowBufferSize() const
 {
     const auto* window = m_data->window.data();
+    if ( window == nullptr )
+        return QSize();
+
     return window->size() * window->devicePixelRatio();
 }
 
