@@ -347,6 +347,11 @@ QVector< VncFrame > VncServer::grabFrames(
     if ( grabber == nullptr )
         return QVector< VncFrame >();
 
+    QElapsedTimer timer;
+
+    if ( logGrab().isDebugEnabled() )
+        timer.start();
+
     QVector< VncFrame > frames;
     frames.reserve( regions.size() );
 
@@ -383,6 +388,15 @@ QVector< VncFrame > VncServer::grabFrames(
          */
         for ( const auto& r : regions )
             frames += m_data->grabFrame( r, quality );
+    }
+
+    if ( logGrab().isDebugEnabled() )
+    {
+        const auto sz = windowBufferSize();
+
+        qCDebug( logGrab ).nospace() << "grabbing frames: "
+            << sz.width() << "x" << sz.height()
+            << " -> " << timer.elapsed() << "ms";
     }
 
     return frames;
