@@ -355,7 +355,7 @@ QVector< VncFrame > VncServer::grabFrames(
         Higher means better quality + less compression
      */
     int quality = 0;
-    if ( qualityLevel > 0 )
+    if ( qualityLevel >= 0 )
         quality = ( qualityLevel + 1 ) * 10;
 
     if ( quality == 0 || !grabber->supportsVideoAcceleration() )
