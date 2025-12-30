@@ -544,6 +544,8 @@ void VncClient::maybeSendFrames()
 
         m_data->pixelStreamer.sendFrames(
             frames.constData(), frames.count(), &m_data->socket );
+
+        m_data->frameRequested = m_data->frameDirty = false;
     }
 }
 
