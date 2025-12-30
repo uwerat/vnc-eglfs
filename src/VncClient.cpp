@@ -525,11 +525,14 @@ void VncClient::maybeSendFrames()
 
     if ( m_data->frameRequested && m_data->frameDirty )
     {
-        int quality = 0;
-        if ( m_data->tightEnabled && m_data->jpegLevel > 0 )
-            quality = m_data->jpegLevel;
+        int qualityLevel = -1;
+        int maxWidth = 1000000; // unlimited
 
-        const int maxWidth = m_data->tightEnabled ? 2048 : 1000000;
+        if ( m_data->tightEnabled && m_data->jpegLevel >= 0 )
+        {
+            qualityLevel = m_data->jpegLevel;
+            maxWidth = 2048;
+        }
 
         QVector< QRect > regions;
         regions.reserve( size.width() / maxWidth + 1 );
@@ -540,7 +543,7 @@ void VncClient::maybeSendFrames()
             regions += QRect( x, 0, width, size.height() );
         }
 
-        const auto frames = server->grabFrames( regions, quality );
+        const auto frames = server->grabFrames( regions, qualityLevel );
 
         m_data->pixelStreamer.sendFrames(
             frames.constData(), frames.count(), &m_data->socket );
