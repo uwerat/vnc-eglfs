@@ -27,8 +27,8 @@ class RfbPixelStreamer
     void receiveClientFormat( RfbSocket* );
 
   private:
-    void sendBytes( const VncFrame&, RfbSocket* );
     void sendBytesRgb( const QSize&, const uint8_t*, RfbSocket* );
+    void sendBytesTight( const VncFrame&, RfbSocket* );
 
   private:
     Q_DISABLE_COPY( RfbPixelStreamer )

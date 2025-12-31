@@ -199,37 +199,30 @@ void RfbPixelStreamer::receiveClientFormat( RfbSocket* socket )
         qWarning("VNC: can only handle true color clients");
 }
 
-void RfbPixelStreamer::sendBytes( const VncFrame& frame, RfbSocket* socket )
+void RfbPixelStreamer::sendBytesTight( const VncFrame& frame, RfbSocket* socket )
 {
-    if ( frame.encoding() == VncFrame::Rgb )
+    socket->sendUint8( ( 1 << 4 ) | ( 1 << 7 ) );
+
+    const quint32 length = frame.byteCount();
+
+    // length in compact representation
+    if ( length >= 16384 )
     {
-        sendBytesRgb( frame.size(), frame.bytes(), socket );
+        socket->sendUint8( ( length & 0x7f ) | ( 1 << 7 ) );
+        socket->sendUint8( ( ( length >> 7 ) & 0x7f ) | ( 1 << 7 ) );
+        socket->sendUint8( length >> 14 );
+    }
+    else if ( length >= 128 )
+    {
+        socket->sendUint8( ( length & 0x7f ) | ( 1 << 7 ) );
+        socket->sendUint8( length >> 7 );
     }
     else
     {
-        socket->sendUint8( ( 1 << 4 ) | ( 1 << 7 ) );
-
-        const quint32 length = frame.byteCount();
-
-        // length in compact representation
-        if ( length >= 16384 )
-        {
-            socket->sendUint8( ( length & 0x7f ) | ( 1 << 7 ) );
-            socket->sendUint8( ( ( length >> 7 ) & 0x7f ) | ( 1 << 7 ) );
-            socket->sendUint8( length >> 14 );
-        }
-        else if ( length >= 128 )
-        {
-            socket->sendUint8( ( length & 0x7f ) | ( 1 << 7 ) );
-            socket->sendUint8( length >> 7 );
-        }
-        else
-        {
-            socket->sendUint8( length );
-        }
-
-        socket->sendBytes( frame.bytes(), frame.byteCount() );
+        socket->sendUint8( length );
     }
+
+    socket->sendBytes( frame.bytes(), frame.byteCount() );
 }
 
 void RfbPixelStreamer::sendBytesRgb(
@@ -277,11 +270,15 @@ void RfbPixelStreamer::sendFrames(
         socket->sendRect64( frame.region() );
 
         if ( frame.encoding() == VncFrame::Jpeg )
+        {
             socket->sendEncoding32( 7 ); // Tight
+            sendBytesTight( frame, socket );
+        }
         else
+        {
             socket->sendEncoding32( 0 ); // Raw
-
-        sendBytes( frame, socket );
+            sendBytesRgb( frame.size(), frame.bytes(), socket );
+        }
     }
 
     socket->flush();

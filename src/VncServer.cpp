@@ -396,6 +396,7 @@ QVector< VncFrame > VncServer::grabFrames(
 
         qCDebug( logGrab ).nospace() << "grabbing frames: "
             << sz.width() << "x" << sz.height()
+            << " compression: " << quality
             << " -> " << timer.elapsed() << "ms";
     }
 

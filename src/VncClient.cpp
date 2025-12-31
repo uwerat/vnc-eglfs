@@ -279,7 +279,7 @@ class VncClient::PrivateData
     // supported encodings in order of preference
     QVector< qint32 > encodings;
 
-    bool tightEnabled = false;
+    int frameEncoding = RfbData::Raw;
     int jpegLevel = -1;
 
     bool frameRequested = false;
@@ -528,7 +528,7 @@ void VncClient::maybeSendFrames()
         int qualityLevel = -1;
         int maxWidth = 1000000; // unlimited
 
-        if ( m_data->tightEnabled && m_data->jpegLevel >= 0 )
+        if ( m_data->frameEncoding == RfbData::Tight )
         {
             qualityLevel = m_data->jpegLevel;
             maxWidth = 2048;
@@ -578,7 +578,7 @@ bool VncClient::handleSetEncodings()
         }
 
         m_data->encodings.clear();
-        m_data->tightEnabled = false;
+        m_data->frameEncoding = RfbData::Raw;
         m_data->cursorEnabled = false;
         m_data->screenResizable = false;
         m_data->jpegLevel = -1;
@@ -588,35 +588,55 @@ bool VncClient::handleSetEncodings()
     if ( bytesAvailable < count * sizeof( quint32 ) )
         return false;
 
+    int frameEncoding = -1;
+
     for ( int i = 0; i < count; ++i )
     {
         const qint32 encoding = socket->receiveUint32();
         m_data->encodings += encoding;
 
-        if ( encoding == RfbData::Tight )
+        switch( encoding )
         {
-            m_data->tightEnabled = true;
-        }
-        else if ( encoding == RfbData::Cursor )
-        {
-            m_data->cursorEnabled = true;
-            maybeSendCursor();
-        }
-        else if ( encoding == RfbData::DesktopSize )
-        {
-            m_data->screenResizable = true;
-        }
-        else if ( encoding >= -32 && encoding <= -23 )
-        {
-            m_data->jpegLevel = 32 + encoding;
-        }
-        else if ( encoding >= -512 && encoding <= -412 )
-        {
-            // TODO ...
+            case RfbData::Tight:
+            case RfbData::Raw:
+            {
+                if ( frameEncoding < 0 )
+                    frameEncoding = encoding;
+
+                break;
+            }
+            case RfbData::Cursor:
+            {
+                m_data->cursorEnabled = true;
+                maybeSendCursor();
+                break;
+            }
+            case RfbData::DesktopSize:
+            {
+                m_data->screenResizable = true;
+                break;
+            }
+            default:
+            {
+                if ( encoding >= -32 && encoding <= -23 )
+                {
+                    m_data->jpegLevel = 32 + encoding;
+                }
+                else if ( encoding >= -512 && encoding <= -412 )
+                {
+                    // TODO ...
+                }
+            }
         }
     }
 
+    if ( ( frameEncoding == RfbData::Tight ) && ( m_data->jpegLevel >= 0 ) )
+    {
+        m_data->frameEncoding = RfbData::Tight;
+    }
+
     qCDebug( logRfb ) << "Encodings\n" << m_data->encodings;
+    qCDebug( logRfb ) << "Using:" << m_data->frameEncoding;
 
     m_data->pendingBytes = 0;
     return true;
