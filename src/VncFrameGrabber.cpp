@@ -18,6 +18,7 @@
 #include <qwaitcondition.h>
 #include <qmutex.h>
 #include <qatomic.h>
+#include <qdebug.h>
 
 namespace
 {

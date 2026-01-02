@@ -31,7 +31,7 @@ class VncFrame
     QSize size() const;
     QRect region() const;
 
-    qsizetype byteCount() const;
+    size_t byteCount() const;
     const uint8_t* bytes() const;
 
     // only for RGB
@@ -69,7 +69,7 @@ inline QRect VncFrame::region() const
     return m_region;
 }
 
-inline qsizetype VncFrame::byteCount() const
+inline size_t VncFrame::byteCount() const
 {
     return m_bytes.size();
 }

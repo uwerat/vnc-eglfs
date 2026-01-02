@@ -132,7 +132,7 @@ namespace
 
         VncFrame& frame( int hash = 0 ) { return m_frames[ hash ]; }
         VncFrame& frame( const QRect& rect, int quality )
-            { return frame( qHash( rect, quality ) ); }
+            { return frame( qHashBits( &rect, sizeof( rect ), quality ) ); }
 
       private:
         QHash< int, VncFrame > m_frames;

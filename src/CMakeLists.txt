@@ -52,10 +52,20 @@ set_target_properties(${target} PROPERTIES
     SOVERSION ${PROJECT_VERSION_MAJOR}
     PUBLIC_HEADER VncNamespace.h)
 
+if(QT_VERSION_MAJOR LESS 6 AND QT_VERSION_MINOR LESS 7)
+    target_link_libraries(${target} PRIVATE
+        Qt5::Gui Qt5::Network
+    )
+    target_include_directories(${target} PRIVATE
+        ${Qt5Gui_PRIVATE_INCLUDE_DIRS}
+    )
+else()
+    target_link_libraries(${target} PRIVATE
+        Qt::Gui Qt::GuiPrivate Qt::Network
+    )
+endif()
+
 target_link_libraries(${target} PUBLIC
-    Qt::Gui
-    Qt::GuiPrivate
-    Qt::Network
     ${OpenSSL_LIBRARIES}
     ${VideoAcceleration_LIBRARIES}
 )

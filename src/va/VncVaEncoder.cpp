@@ -11,6 +11,10 @@
 #include <va/va.h>
 #include <va/va_enc_jpeg.h>
 
+#include <cstdint>
+#include <cmath>
+#include <vector>
+
 /*
     All tables and the creation of the header are JPEG standards
     that should be available from libjpeg. TODO ...

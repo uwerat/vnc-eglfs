@@ -4,11 +4,13 @@
  *****************************************************************************/
 
 #include "RfbInputEventHandler.h"
-#include <qpa/qwindowsysteminterface.h>
+
 #include <qguiapplication.h>
+#include <qdebug.h>
+#include <qpa/qwindowsysteminterface.h>
+
 #include <unordered_map>
 #include <cctype>
-#include <QDebug>
 
 namespace Rfb
 {

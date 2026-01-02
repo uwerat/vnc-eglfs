@@ -15,6 +15,20 @@ add_library(${target} MODULE
     metadata.json
 )
 
+target_link_libraries(${target} PRIVATE
+    Qt${QT_VERSION_MAJOR}::Gui
+)
+
+if(QT_VERSION_MAJOR LESS 6 AND QT_VERSION_MINOR LESS 7)
+    target_include_directories(${target} PRIVATE
+        ${Qt5Gui_PRIVATE_INCLUDE_DIRS}
+    )
+else()
+    target_link_libraries(${target} PRIVATE
+        Qt::GuiPrivate
+    )
+endif()
+
 target_link_libraries(${target} PRIVATE qvnceglfs )
 
 install(TARGETS ${target} DESTINATION plugins/platforms)
