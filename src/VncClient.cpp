@@ -27,6 +27,9 @@
 
 #include <qloggingcategory.h>
 
+Q_DECLARE_LOGGING_CATEGORY( logRfb );
+Q_DECLARE_LOGGING_CATEGORY( logFb );
+
 Q_LOGGING_CATEGORY( logRfb, "vnceglfs.rfb", QtCriticalMsg )
 Q_LOGGING_CATEGORY( logFb, "vnceglfs.fb", QtCriticalMsg )
 

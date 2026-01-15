@@ -3,8 +3,19 @@
  *            SPDX-License-Identifier: BSD-3-Clause
  *****************************************************************************/
 
+#include <qglobal.h>
+
+QT_WARNING_PUSH
+
+#if QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
+    QT_WARNING_DISABLE_CLANG("-Wstringop-overread")
+    QT_WARNING_DISABLE_GCC("-Wstringop-overread")
+#endif
+
 #include <qpa/qplatformintegrationplugin.h>
 #include <qpa/qplatformintegrationfactory_p.h>
+
+QT_WARNING_POP
 
 #include <VncNamespace.h>
 

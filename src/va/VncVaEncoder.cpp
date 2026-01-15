@@ -245,9 +245,9 @@ namespace VncJpeg
             add16( 3 + quant.size() );
             add2x4( 0, i ); // Pq, Tq
 
-            for ( size_t i = 0; i < quant.size(); i++ )
+            for ( size_t j = 0; j < quant.size(); j++ )
             {
-                uint32_t qk = quant[ i ];
+                uint32_t qk = quant[ j ];
                 qk = qBound( 1U, ( qk * quality ) / 100, 255U );
 
                 add8( qk );

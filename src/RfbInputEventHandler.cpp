@@ -261,8 +261,8 @@ void Rfb::handleKeyEvent( quint32 keysym, bool down, QWindow* window )
         auto modifiers = QGuiApplication::keyboardModifiers();
 
         // QFlags::setFlag is not available for Qt < 5.7
-        auto setModifier = [&modifiers]( Qt::KeyboardModifier modifier, bool down )
-            { if (down) modifiers |= modifier; else modifiers &= ~modifier; };
+        auto setModifier = [&modifiers]( Qt::KeyboardModifier modifier, bool on )
+            { if (on) modifiers |= modifier; else modifiers &= ~modifier; };
 
         if ( qtkey == Qt::Key_Shift )
         {

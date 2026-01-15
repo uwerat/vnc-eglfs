@@ -21,6 +21,9 @@
 
 #include <qpa/qplatformcursor.h>
 
+Q_DECLARE_LOGGING_CATEGORY( logGrab );
+Q_DECLARE_LOGGING_CATEGORY( logConnection );
+
 Q_LOGGING_CATEGORY( logGrab, "vnceglfs.grab", QtCriticalMsg )
 Q_LOGGING_CATEGORY( logConnection, "vnceglfs.connection" )
 
