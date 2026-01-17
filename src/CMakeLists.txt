@@ -65,17 +65,21 @@ else()
     )
 endif()
 
-target_link_libraries(${target} PUBLIC
-    ${OpenSSL_LIBRARIES}
-    ${VideoAcceleration_LIBRARIES}
-)
+target_compile_definitions(${target} PRIVATE VNC_MAKEDLL)
 
-target_compile_definitions(${target} PRIVATE
-    VNC_MAKEDLL)
+if ( BUILD_AUTHENTIFICATION )
+    target_compile_definitions(${target} PRIVATE -DVNC_SSL)
 
-target_compile_definitions(${target} PRIVATE
-    -DVNC_VA_ENCODER
-)
+    add_library(OpenSSL INTERFACE IMPORTED)
+    target_link_libraries(${target} PRIVATE ${OpenSSL_LIBRARIES})
+endif()
+
+if ( BUILD_VIDEO_ACCELERATION )
+    target_compile_definitions(${target} PRIVATE -DVNC_VA_ENCODER)
+
+    add_library(VideoAcceleration INTERFACE IMPORTED)
+    target_link_libraries(${target} PRIVATE ${VideoAcceleration_LIBRARIES})
+endif()
 
 # configure_package_config_file TODO ...
 

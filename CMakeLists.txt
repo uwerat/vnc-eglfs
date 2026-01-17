@@ -160,8 +160,10 @@ project(vnceglfs
 
 set(CMAKE_BUILD_TYPE Debug)
 
-option(BUILD_PEDANTIC       "Enable pedantic compile flags ( only GNU/CLANG )" OFF)
+option(BUILD_PEDANTIC "Enable pedantic compile flags ( only GNU/CLANG )" OFF)
 option(BUILD_PLATFORM_PROXY "Build the platformproxy plugin" ON)
+option(BUILD_VIDEO_ACCELERATION "Enable GPU encoding" ON)
+option(BUILD_AUTHENTIFICATION "Enable authentification" ON)
 
 find_packages()
 setup()
