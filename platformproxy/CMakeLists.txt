@@ -30,5 +30,8 @@ else()
 endif()
 
 target_link_libraries(${target} PRIVATE qvnceglfs )
+set_target_properties(${target} PROPERTIES
+    INSTALL_RPATH "$ORIGIN/../../lib"
+)
 
 install(TARGETS ${target} DESTINATION plugins/platforms)
