@@ -79,6 +79,9 @@ if ( BUILD_VIDEO_ACCELERATION )
 
     add_library(VideoAcceleration INTERFACE IMPORTED)
     target_link_libraries(${target} PRIVATE ${VideoAcceleration_LIBRARIES})
+
+    add_library(VideoAccelerationDrm INTERFACE IMPORTED)
+    target_link_libraries(${target} PRIVATE ${VideoAccelerationDrm_LIBRARIES})
 endif()
 
 # configure_package_config_file TODO ...
