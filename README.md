@@ -59,7 +59,10 @@ These features are implemented:
 
 - [Tight/JPEG]( https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#tight-encoding )
 
-    Using the encoder from [Qt's image I/O system]( https://doc.qt.io/qt-6/qtimageformats-index.html),
+    Hardware accelerated encoding on the GPU for platforms where
+    [VA_API]( https://en.wikipedia.org/wiki/Video_Acceleration_API ) is supported.
+
+    Fallback implementation on the CPU using the encoder from [Qt's image I/O system]( https://doc.qt.io/qt-6/qtimageformats-index.html),
     usually a wrapper for: [libjpeg-turbo]( https://libjpeg-turbo.org/ )
 
 The following important parts are missing:
@@ -71,13 +74,6 @@ The following important parts are missing:
     Looks like support for H.264 has been [added recently]( https://github.com/TigerVNC/tigervnc/pull/1194 )
     to the [TigerVNC]( https://github.com/TigerVNC ) viewer.
 
-- hardware video acceleration: [VA_API]( https://en.wikipedia.org/wiki/Video_Acceleration_API )
-
-    Without compressing the frames early on the GPU the performance of the pipeline suffers
-    from expensive glReadPixels calls and what is needed to compress the image on the CPU.<br>
-    If you are familiar with [libva]( http://intel.github.io/libva/group__api__core.html)
-    and want to help: let me know.
-
 # Installation
 
 You can build and install the libraries/headers and the
@@ -87,14 +83,61 @@ A typical command line sequence might be:
 ```
 mkdir build
 cd build
-cmake <vnceglfs-dir> [-DCMAKE_PREFIX_PATH=<qt-dir>] [-DBUILD_PLATFORM_PROXY=ON]
+cmake <vnceglfs-dir> [-DCMAKE_PREFIX_PATH=<qt-dir>] [-DBUILD_PLATFORM_PROXY=ON] [-DBUILD_AUTHENTIFICATION=ON] [-DBUILD_VIDEO_ACCELERATION=ON]
 cmake --build .
 cmake --install . [--prefix <install-dir>]
 ```
 
+# Dependencies
+
+- GPU accelerated Encoding
+
+   The existing implementation prepares the frames on the GPU
+   before encoding them. Doing the preparations on the CPU
+   is possible but not implemented yet. So for the moment
+   GPU accelerated encoding is limited to platforms where the complete
+   pipeline can be done on the GPU.
+
+   [dma-buf]( https://www.kernel.org/doc/html/latest/driver-api/dma-buf.html ) 
+
+   It is possible to feed the encoder on the GPU from an EGL texture without
+   down-/uploading it to the CPU. This requires a Qt platform backed by EGL.
+
+   When using X11  ( xcb platform ) you can enforce EGL by:
+
+    ```
+   export QT_XCB_GL_INTEGRATION=xcb_egl
+
+   [VA_API]( https://en.wikipedia.org/wiki/Video_Acceleration_API ) defines and
+   implements a common interface while the actual functionality is implemented
+   in GPU specific drivers.
+   Which driver is used and what functionalities are suppored can be checked with the
+   vainfo command line tool.
+
+   For JPEG encoding the following configuration needs to be avalable:
+
+   - VAProfileJPEGBaseline/VAEntrypointEncPicture
+
+   For encoding to JPEG
+
+   - VAProfileNone/VAEntrypointVideoProc
+
+   This combination is needed to convert the frame into NV12 video pixel format.
+
+   For Intel GPUs you need the [iHD]( https://github.com/intel/media-driver ) driver.
+   If vainfo indicates using the older i965 driver you have to set:
+
+   ```
+   # export LIBVA_DRIVER_NAME=iHD
+
+   The [iHD]( https://github.com/intel/media-driver ) driver contains parts that are not
+   fully open source and the driver on your system might have been build excluding these
+   parts ( = VAProfileNone/VAEntrypointVideoProc is missing. 
+
+  
 # How to use
 
-There are 2 way how to enable VNC support for an applation:
+There are 2 way how to enable VNC support for an application:
 
 - [C++ API]( https://github.com/uwerat/vnc-eglfs/blob/main/src/VncNamespace.h )
 
