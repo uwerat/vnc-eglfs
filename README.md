@@ -92,47 +92,48 @@ cmake --install . [--prefix <install-dir>]
 
 - GPU accelerated Encoding
 
-   The existing implementation prepares the frames on the GPU
-   before encoding them. Doing the preparations on the CPU
-   is possible but not implemented yet. So for the moment
-   GPU accelerated encoding is limited to platforms where the complete
-   pipeline can be done on the GPU.
+    The existing implementation prepares the frames on the GPU
+    before encoding them. Doing the preparations on the CPU
+    is possible but not implemented yet. So for the moment
+    GPU accelerated encoding is limited to platforms where the complete
+    pipeline can be done on the GPU.
 
-   [dma-buf]( https://www.kernel.org/doc/html/latest/driver-api/dma-buf.html ) 
+    [dma-buf]( https://www.kernel.org/doc/html/latest/driver-api/dma-buf.html ) 
 
-   It is possible to feed the encoder on the GPU from an EGL texture without
-   down-/uploading it to the CPU. This requires a Qt platform backed by EGL.
+        It is possible to feed the encoder on the GPU from an EGL texture without
+        down-/uploading it to the CPU. This requires a Qt platform backed by EGL.
 
-   When using X11  ( xcb platform ) you can enforce EGL by:
+        When using X11  ( xcb platform ) you can enforce EGL by:
 
-    ```
-   export QT_XCB_GL_INTEGRATION=xcb_egl
+        ```
+            export QT_XCB_GL_INTEGRATION=xcb_egl
 
-   [VA_API]( https://en.wikipedia.org/wiki/Video_Acceleration_API ) defines and
-   implements a common interface while the actual functionality is implemented
-   in GPU specific drivers.
-   Which driver is used and what functionalities are suppored can be checked with the
-   vainfo command line tool.
+    [VA_API]( https://en.wikipedia.org/wiki/Video_Acceleration_API ) defines and
+    implements a common interface while the actual functionality is implemented
+    in GPU specific drivers.
+    Which driver is used and what functionalities are suppored can be checked with the
+    vainfo command line tool.
 
-   For JPEG encoding the following configuration needs to be avalable:
+    For JPEG encoding the following configuration needs to be avalable:
 
-   - VAProfileJPEGBaseline/VAEntrypointEncPicture
+    - VAProfileJPEGBaseline/VAEntrypointEncPicture
 
-   For encoding to JPEG
+        For encoding to JPEG
 
-   - VAProfileNone/VAEntrypointVideoProc
+    - VAProfileNone/VAEntrypointVideoProc
 
-   This combination is needed to convert the frame into NV12 video pixel format.
+        This combination is needed to convert the frame into NV12 video pixel format.
 
-   For Intel GPUs you need the [iHD]( https://github.com/intel/media-driver ) driver.
-   If vainfo indicates using the older i965 driver you have to set:
+        For Intel GPUs you need the [iHD]( https://github.com/intel/media-driver ) driver.
+        If vainfo indicates using the older i965 driver you have to set:
 
-   ```
-   # export LIBVA_DRIVER_NAME=iHD
+
+        ```
+            # export LIBVA_DRIVER_NAME=iHD
 
    The [iHD]( https://github.com/intel/media-driver ) driver contains parts that are not
    fully open source and the driver on your system might have been build excluding these
-   parts ( = VAProfileNone/VAEntrypointVideoProc is missing. 
+   parts ( = VAProfileNone/VAEntrypointVideoProc is missing ). 
 
   
 # How to use
