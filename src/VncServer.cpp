@@ -157,13 +157,18 @@ void VncServer::addClient( qintptr fd )
     if ( m_window && !m_grabConnectionId )
     {
         /*
-            afterRendering is from the scene graph thread, so we
+            afterRendering and afterFrameEnd are from the scene graph thread, so we
             need a Qt::DirectConnection to avoid, that the image is
             already gone, when being scheduled from a Qt::QQueuedConnection !
          */
 
+#if QT_VERSION < QT_VERSION_CHECK( 6, 0, 0 )
         m_grabConnectionId = QObject::connect( m_window, SIGNAL(afterRendering()),
             this, SLOT(updateFrameBuffer()), Qt::DirectConnection );
+#else
+        m_grabConnectionId = QObject::connect( m_window, SIGNAL(afterFrameEnd()),
+            this, SLOT(updateFrameBuffer()), Qt::DirectConnection );
+#endif
 
         QMetaObject::invokeMethod( m_window, "update" );
     }
